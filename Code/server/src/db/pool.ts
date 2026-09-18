@@ -10,46 +10,52 @@ type AnyPool = {
 
 let poolInstance: AnyPool | null = null;
 
+function poolFromConnectionString(connectionString: string): AnyPool {
+  // Prefer Netlify helper (Neon serverless driver when available).
+  try {
+    return getDatabase({ connectionString }).pool as unknown as AnyPool;
+  } catch {
+    const needsSsl = /neon\.tech|supabase\.co|amazonaws\.com|netlify|sslmode=require/i.test(connectionString);
+    return new Pool({
+      connectionString,
+      ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
+  }
+}
+
 /**
  * Resolve DB connection for Netlify Functions vs local Docker.
  *
- * Do not paste Code/.env into Netlify:
- *   DATABASE_URL=...@localhost:5433 is unreachable from Functions (ECONNREFUSED).
- * Enable Netlify Database so NETLIFY_DB_URL is injected, and delete DATABASE_URL
- * (or point it at a real remote Postgres).
+ * Priority:
+ * 1. NETLIFY_DB_URL (Netlify Database)
+ * 2. Non-localhost DATABASE_URL (Neon / Supabase / any hosted Postgres)
+ * 3. Local Docker default (dev only)
  */
 function createPool(): AnyPool {
-  const netlifyUrl = process.env.NETLIFY_DB_URL;
-
-  if (netlifyUrl) {
-    return getDatabase({ connectionString: netlifyUrl }).pool as unknown as AnyPool;
+  if (process.env.NETLIFY_DB_URL) {
+    return poolFromConnectionString(process.env.NETLIFY_DB_URL);
   }
 
   try {
-    const url = getConnectionString();
-    return getDatabase({ connectionString: url }).pool as unknown as AnyPool;
+    return poolFromConnectionString(getConnectionString());
   } catch {
-    // no Netlify DB env
+    // not configured
+  }
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl && !isLocalDatabaseUrl(databaseUrl)) {
+    return poolFromConnectionString(databaseUrl);
   }
 
   const onNetlify = isNetlifyRuntime() || config.isNetlify;
-  const localUrl = config.databaseUrl;
-
   if (onNetlify) {
     throw new Error(
-      'No NETLIFY_DB_URL. In Netlify: Data & Storage → Database → create/enable, then DELETE ' +
-        'DATABASE_URL if it points at localhost:5433 (copied from local .env). Redeploy after that.',
+      'No database URL on Netlify. Either: (1) Data & Storage → Database → Create (sets NETLIFY_DB_URL), ' +
+        'or (2) set DATABASE_URL to a hosted Postgres URL (Neon/Supabase) — not localhost:5433. Then redeploy.',
     );
   }
 
-  if (isLocalDatabaseUrl(localUrl) && process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    throw new Error(
-      'DATABASE_URL points at localhost, which is unreachable from Netlify Functions. ' +
-        'Delete DATABASE_URL in Netlify env vars and enable Netlify Database (NETLIFY_DB_URL).',
-    );
-  }
-
-  return new Pool({ connectionString: localUrl });
+  return new Pool({ connectionString: config.databaseUrl });
 }
 
 function getPool(): AnyPool {

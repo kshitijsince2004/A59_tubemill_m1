@@ -122,14 +122,20 @@ router.get('/health', async (_req, res) => {
     db = 'error';
     dbError = err instanceof Error ? err.message : String(err);
   }
-  const databaseUrl = process.env.DATABASE_URL ?? '';
   ok(res, {
     status: db === 'ok' ? 'ok' : 'degraded',
     db,
     dbError,
     hasNetlifyDbUrl: Boolean(process.env.NETLIFY_DB_URL),
-    databaseUrlIsLocalhost: /localhost|127\.0\.0\.1/i.test(databaseUrl),
+    hasRemoteDatabaseUrl: Boolean(
+      process.env.DATABASE_URL && !/localhost|127\.0\.0\.1/i.test(process.env.DATABASE_URL),
+    ),
+    databaseUrlIsLocalhost: /localhost|127\.0\.0\.1/i.test(process.env.DATABASE_URL ?? ''),
     context: process.env.CONTEXT ?? null,
+    fix:
+      db === 'ok'
+        ? null
+        : 'Create Netlify Database (Data & Storage → Database) OR set DATABASE_URL to a Neon/Supabase URL (not localhost). Then redeploy.',
     collectorMode: config.collectorMode,
     bcAdapter: config.bcAdapter,
   });
