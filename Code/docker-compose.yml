@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: tubemill
+      POSTGRES_PASSWORD: tubemill
+      POSTGRES_DB: tubemill
+    ports:
+      - "5433:5432"
+    volumes:
+      - tubemill_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tubemill"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://m1_app:m1_app@db:5432/tubemill
+      MIGRATE_DATABASE_URL: postgresql://tubemill:tubemill@db:5432/tubemill
+      TENANT_ID: "00000000-0000-4000-8000-000000000001"
+      AUTH_MODE: static
+      STATIC_APP_ROLE: OPERATOR
+      COLLECTOR_MODE: sim
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-in-production}
+      CORS_ORIGIN: same-origin
+      YIELD_TOLERANCE_PCT: "2"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  tubemill_pg:

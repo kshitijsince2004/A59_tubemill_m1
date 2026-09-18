@@ -1,0 +1,8 @@
+{
+  "version": "tubemill_dpr.v1",
+  "forms": {
+    "TM-FT-02": ["workOrderNo", "customerCode", "gradeCode", "sizeKey", "bundles", "qualityTotals", "yieldPct"],
+    "TM-FT-03": ["stoppages"],
+    "TM-FT-04": ["paramSnapshots", "tooling", "band"]
+  }
+}
