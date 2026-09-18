@@ -1,7 +1,7 @@
 # Netlify deploys from the Code/ workspace (not the repo root).
 [build]
   base = "Code"
-  command = "npm install && npm run build -w shared && npm run build -w client"
+  command = "node -e \"console.log('[build] NETLIFY_DB_URL', process.env.NETLIFY_DB_URL ? 'SET' : 'MISSING'); console.log('[build] CONTEXT', process.env.CONTEXT || 'none')\" && npm install && npm run build -w shared && npm run build -w client"
   publish = "client/dist"
 
 [functions]
