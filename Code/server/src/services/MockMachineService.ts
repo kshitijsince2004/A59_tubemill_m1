@@ -9,6 +9,7 @@ import {
 import {
   startCollectorForRun,
   setCollectorForceOutOfBand,
+  tickCollectorOnce,
 } from '../collector/CollectorRunner';
 import type { MillRunState } from '@a59/shared';
 
@@ -21,6 +22,10 @@ function hourFloor(d: Date): Date {
 /** Live strip: collector + ingest own samples/counts; this only reads. */
 export async function getLive(runId: string) {
   startCollectorForRun(runId);
+  // Serverless / on-demand: advance the sim on each live poll (UI already polls this endpoint).
+  if (config.collectorOnDemand) {
+    await tickCollectorOnce();
+  }
   const live = await getLiveFromIngest(runId);
   if (live) return live;
 

@@ -1,0 +1,23 @@
+# Netlify deploys from the Code/ workspace (not the repo root).
+[build]
+  base = "Code"
+  command = "npm install && npm run build -w shared && npm run build -w client"
+  publish = "client/dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  external_node_modules = ["express", "pg", "cors", "dotenv", "serverless-http", "@neondatabase/serverless"]
+
+# API function must win over the SPA fallback.
+[[redirects]]
+  force = true
+  from = "/api/*"
+  status = 200
+  to = "/.netlify/functions/api/:splat"
+
+# SPA client routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

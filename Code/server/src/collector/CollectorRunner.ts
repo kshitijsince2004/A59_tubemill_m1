@@ -104,8 +104,14 @@ export function getCollectorLive(runId: string) {
 }
 
 function startLoop(): void {
+  if (config.collectorOnDemand) return;
   if (interval) return;
   interval = setInterval(() => void tick(), 2000);
+}
+
+/** Drive one collector poll (used on Netlify where setInterval cannot survive between requests). */
+export async function tickCollectorOnce(): Promise<void> {
+  await tick();
 }
 
 async function tick(): Promise<void> {
@@ -180,5 +186,9 @@ async function tick(): Promise<void> {
 }
 
 export function startCollectorLoop(): void {
+  if (config.collectorOnDemand) {
+    console.log('[collector] on-demand mode — interval suppressed (drive via tickCollectorOnce)');
+    return;
+  }
   startLoop();
 }

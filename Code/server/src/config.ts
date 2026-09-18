@@ -1,7 +1,18 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// Avoid __dirname (undefined when esbuild-bundled as ESM for Netlify Functions).
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), '../.env'),
+];
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 type AppRole = 'OPERATOR' | 'SUPERVISOR' | 'PLANT_HEAD' | 'ADMIN';
 const VALID_ROLES: AppRole[] = ['OPERATOR', 'SUPERVISOR', 'PLANT_HEAD', 'ADMIN'];
@@ -11,7 +22,18 @@ function parseAppRole(raw: string | undefined, fallback: AppRole): AppRole {
   return (VALID_ROLES.includes(upper as AppRole) ? upper : fallback) as AppRole;
 }
 
-const authModeRaw = (process.env.AUTH_MODE ?? (process.env.NODE_ENV === 'production' ? 'static' : 'dev')).toLowerCase();
+const isNetlify = Boolean(process.env.NETLIFY || process.env.NETLIFY_DEV);
+const isProduction = process.env.NODE_ENV === 'production' || isNetlify;
+
+/**
+ * Deployed auth decision (demo / Netlify):
+ * Neither AUTH_MODE authenticates users — endpoints remain publicly reachable.
+ * Prefer `static` on Netlify so visitors cannot elevate to ADMIN via x-app-role.
+ * Override with AUTH_MODE=dev in Netlify env if the login role picker is needed for a private demo.
+ */
+const authModeRaw = (
+  process.env.AUTH_MODE ?? (isNetlify || process.env.NODE_ENV === 'production' ? 'static' : 'dev')
+).toLowerCase();
 const authMode = authModeRaw === 'static' ? 'static' : 'dev';
 
 const tenantFromEnv =
@@ -22,17 +44,23 @@ if (process.env.DEMO_TENANT_ID && !process.env.TENANT_ID) {
 }
 
 const serviceToken = process.env.SERVICE_TOKEN ?? 'dev-service-token';
-const isProduction = process.env.NODE_ENV === 'production';
 
 if (authMode === 'static' && !process.env.STATIC_APP_ROLE) {
   console.warn('[config] AUTH_MODE=static without STATIC_APP_ROLE; defaulting to OPERATOR');
 }
+
+/** Drive sim collector per request when on Netlify (no long-lived timers). */
+const collectorOnDemand =
+  process.env.COLLECTOR_DRIVE === 'on_demand' ||
+  isNetlify ||
+  process.env.COLLECTOR_DRIVE === 'request';
 
 export const config = {
   port: Number(process.env.PORT ?? 3001),
   databaseUrl: process.env.DATABASE_URL ?? 'postgresql://tubemill:tubemill@localhost:5433/tubemill',
   tenantId: tenantFromEnv,
   collectorMode: (process.env.COLLECTOR_MODE ?? 'sim').toLowerCase(),
+  collectorOnDemand,
   serviceToken,
   bcPlanPath: process.env.BC_PLAN_PATH ?? '',
   bcAdapter: (process.env.BC_ADAPTER ?? 'file').toLowerCase(),
@@ -41,12 +69,13 @@ export const config = {
   staticAppRole: parseAppRole(process.env.STATIC_APP_ROLE, 'OPERATOR'),
   corsOrigin: process.env.CORS_ORIGIN ?? (isProduction ? 'same-origin' : '*'),
   isProduction,
+  isNetlify,
   nodeEnv: process.env.NODE_ENV ?? 'development',
 };
 
 export function assertProductionSecrets(): void {
   if (config.isProduction && (!process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token')) {
-    throw new Error('Set a non-default SERVICE_TOKEN when NODE_ENV=production');
+    throw new Error('Set a non-default SERVICE_TOKEN when NODE_ENV=production or on Netlify');
   }
 }
 

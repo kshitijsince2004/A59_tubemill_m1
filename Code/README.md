@@ -49,6 +49,21 @@ npm start
 
 Serves API and `client/dist` from the same process (port `PORT`, default 3001).
 
+### Netlify (demo branch)
+
+`netlify.toml` at the repo root uses `base = "Code"`, builds `shared` + `client`, publishes `client/dist`, and mounts the Express app as a Function at `/api/*`. Schema + reference data live in `netlify/database/migrations/` (applied by Netlify Database). Set a non-default `SERVICE_TOKEN` in the Netlify UI.
+
+On Netlify, `AUTH_MODE` defaults to `static` / `OPERATOR` (no header role elevation). Endpoints are still unauthenticated — do not treat a public URL as secure.
+
+```powershell
+# Local Docker path remains:
+docker compose up -d db
+npm run migrate
+npm run seed
+npm run build
+npm start
+```
+
 ### Docker (API + DB)
 
 ```powershell

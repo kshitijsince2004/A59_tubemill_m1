@@ -4,6 +4,7 @@ import { query } from '../db/pool';
 import { config, assertBcAdapterSupported } from '../config';
 import { getRun, getCoils, getBundles, getStoppages } from './RunService';
 import { buildDprExport } from './DprExportService';
+import bundledQueuePlan from '../../seeds/queue_plan.json';
 
 export interface QueueCardInput {
   id: string;
@@ -26,13 +27,18 @@ export interface BcWritebackAdapter {
   writeActuals(runId: string): Promise<{ ok: boolean; payload: unknown }>;
 }
 
+function loadQueuePlan(): QueueCardInput[] {
+  if (config.bcPlanPath) {
+    return JSON.parse(fs.readFileSync(path.resolve(config.bcPlanPath), 'utf8')) as QueueCardInput[];
+  }
+  // Bundled JSON — works when esbuild-bundled for Netlify (no __dirname filesystem reads).
+  return bundledQueuePlan as QueueCardInput[];
+}
+
 /** File-based BC plan adapter — replace with live Dynamics OData when available. */
 export class FileBcPlanAdapter implements BcPlanAdapter {
   async pullWorkOrders(millCode: string): Promise<QueueCardInput[]> {
-    const planPath =
-      config.bcPlanPath ||
-      path.resolve(__dirname, '../../seeds/queue_plan.json');
-    const raw = JSON.parse(fs.readFileSync(planPath, 'utf8')) as QueueCardInput[];
+    const raw = loadQueuePlan();
     return raw.filter((c) => c.millCode === millCode);
   }
 }
