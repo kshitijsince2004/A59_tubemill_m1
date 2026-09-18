@@ -1,6 +1,6 @@
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { getConnectionString, getDatabase } from '@netlify/database';
-import { config } from '../config';
+import { config, isLocalDatabaseUrl, isNetlifyRuntime } from '../config';
 
 type AnyPool = {
   connect: () => Promise<PoolClient>;
@@ -10,19 +10,18 @@ type AnyPool = {
 
 let poolInstance: AnyPool | null = null;
 
-function isLocalDockerUrl(url: string): boolean {
-  return /localhost|127\.0\.0\.1/i.test(url);
-}
-
 /**
  * Resolve DB connection for Netlify Functions vs local Docker.
- * Never silently fall back to localhost:5433 inside Netlify — that yields ECONNREFUSED 500s.
+ *
+ * Do not paste Code/.env into Netlify:
+ *   DATABASE_URL=...@localhost:5433 is unreachable from Functions (ECONNREFUSED).
+ * Enable Netlify Database so NETLIFY_DB_URL is injected, and delete DATABASE_URL
+ * (or point it at a real remote Postgres).
  */
 function createPool(): AnyPool {
   const netlifyUrl = process.env.NETLIFY_DB_URL;
 
   if (netlifyUrl) {
-    // getDatabase() picks Neon serverless pool when NETLIFY_DB_DRIVER=serverless
     return getDatabase({ connectionString: netlifyUrl }).pool as unknown as AnyPool;
   }
 
@@ -33,18 +32,20 @@ function createPool(): AnyPool {
     // no Netlify DB env
   }
 
-  if (config.isNetlify || process.env.NETLIFY || process.env.NETLIFY_DEV) {
+  const onNetlify = isNetlifyRuntime() || config.isNetlify;
+  const localUrl = config.databaseUrl;
+
+  if (onNetlify) {
     throw new Error(
-      'NETLIFY_DB_URL is not set. Enable Netlify Database (Project → Data & Storage → Database), ' +
-        'ensure @netlify/database is a root dependency, and redeploy. ' +
-        'Refusing to use localhost inside a Netlify Function.',
+      'No NETLIFY_DB_URL. In Netlify: Data & Storage → Database → create/enable, then DELETE ' +
+        'DATABASE_URL if it points at localhost:5433 (copied from local .env). Redeploy after that.',
     );
   }
 
-  const localUrl = config.databaseUrl;
-  if (process.env.NODE_ENV === 'production' && isLocalDockerUrl(localUrl)) {
+  if (isLocalDatabaseUrl(localUrl) && process.env.AWS_LAMBDA_FUNCTION_NAME) {
     throw new Error(
-      `DATABASE_URL points at ${localUrl}, which is unreachable from Netlify. Set NETLIFY_DB_URL or enable Netlify Database.`,
+      'DATABASE_URL points at localhost, which is unreachable from Netlify Functions. ' +
+        'Delete DATABASE_URL in Netlify env vars and enable Netlify Database (NETLIFY_DB_URL).',
     );
   }
 

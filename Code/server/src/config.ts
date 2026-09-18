@@ -22,7 +22,25 @@ function parseAppRole(raw: string | undefined, fallback: AppRole): AppRole {
   return (VALID_ROLES.includes(upper as AppRole) ? upper : fallback) as AppRole;
 }
 
-const isNetlify = Boolean(process.env.NETLIFY || process.env.NETLIFY_DEV);
+/** True in Netlify Functions / builds even when NETLIFY is unset at runtime. */
+export function isNetlifyRuntime(): boolean {
+  return Boolean(
+    process.env.NETLIFY ||
+      process.env.NETLIFY_DEV ||
+      process.env.NETLIFY_DB_URL ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.CONTEXT === 'production' ||
+      process.env.CONTEXT === 'deploy-preview' ||
+      process.env.CONTEXT === 'branch-deploy',
+  );
+}
+
+export function isLocalDatabaseUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  return /localhost|127\.0\.0\.1/i.test(url);
+}
+
+const isNetlify = isNetlifyRuntime();
 const isProduction = process.env.NODE_ENV === 'production' || isNetlify;
 
 /**
@@ -55,9 +73,21 @@ const collectorOnDemand =
   isNetlify ||
   process.env.COLLECTOR_DRIVE === 'request';
 
+/**
+ * Local Docker URL from a copied .env must never be used on Netlify.
+ * Prefer NETLIFY_DB_URL; ignore localhost DATABASE_URL in Functions.
+ */
+function resolveConfiguredDatabaseUrl(): string {
+  const fromEnv = process.env.DATABASE_URL;
+  if (fromEnv && !(isNetlify && isLocalDatabaseUrl(fromEnv))) {
+    return fromEnv;
+  }
+  return 'postgresql://tubemill:tubemill@localhost:5433/tubemill';
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 3001),
-  databaseUrl: process.env.DATABASE_URL ?? 'postgresql://tubemill:tubemill@localhost:5433/tubemill',
+  databaseUrl: resolveConfiguredDatabaseUrl(),
   tenantId: tenantFromEnv,
   collectorMode: (process.env.COLLECTOR_MODE ?? 'sim').toLowerCase(),
   collectorOnDemand,
@@ -74,9 +104,20 @@ export const config = {
 };
 
 export function assertProductionSecrets(): void {
-  if (config.isProduction && (!process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token')) {
-    throw new Error('Set a non-default SERVICE_TOKEN when NODE_ENV=production or on Netlify');
+  const usingDefaultToken =
+    !process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token';
+  if (!config.isProduction || !usingDefaultToken) return;
+
+  // Demo Netlify sites often paste the local .env (including dev-service-token).
+  // Warn instead of crashing the function with 502 when AUTH_MODE=dev.
+  if (authMode === 'dev' && isNetlify) {
+    console.warn(
+      '[config] SERVICE_TOKEN is still the local default. Set a non-default SERVICE_TOKEN in Netlify env for any shared URL.',
+    );
+    return;
   }
+
+  throw new Error('Set a non-default SERVICE_TOKEN when NODE_ENV=production or on Netlify');
 }
 
 export function assertCollectorModeSupported(): void {

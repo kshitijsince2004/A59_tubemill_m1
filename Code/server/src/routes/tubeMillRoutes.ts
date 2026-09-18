@@ -122,11 +122,14 @@ router.get('/health', async (_req, res) => {
     db = 'error';
     dbError = err instanceof Error ? err.message : String(err);
   }
+  const databaseUrl = process.env.DATABASE_URL ?? '';
   ok(res, {
     status: db === 'ok' ? 'ok' : 'degraded',
     db,
     dbError,
     hasNetlifyDbUrl: Boolean(process.env.NETLIFY_DB_URL),
+    databaseUrlIsLocalhost: /localhost|127\.0\.0\.1/i.test(databaseUrl),
+    context: process.env.CONTEXT ?? null,
     collectorMode: config.collectorMode,
     bcAdapter: config.bcAdapter,
   });

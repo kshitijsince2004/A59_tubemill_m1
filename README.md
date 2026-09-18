@@ -11,19 +11,29 @@ Zedral Module M1 (Data Capture) build for the Goodluck India A-59 ERW tube mill,
 
 The `demo` branch ports the app for Netlify (static client + serverless Express + Netlify Database).
 
-1. Connect the repo in Netlify with branch `demo` (or set production branch to `demo`).
-2. Enable **Netlify Database** on the site: **Data & Storage → Database → Create**, or redeploy after `@netlify/database` is in the root `Code/package.json` so Netlify auto-provisions `NETLIFY_DB_URL`.
-3. Do **not** set `DATABASE_URL` to a localhost/Docker URL in the Netlify UI — that causes `ECONNREFUSED 127.0.0.1:5433` on `/api/*`.
-4. Set environment variables:
-   - `SERVICE_TOKEN` — required non-default secret (production/Netlify)
-   - `TENANT_ID` — optional; defaults to demo UUID `00000000-0000-4000-8000-000000000001`
-   - `AUTH_MODE=static` + `STATIC_APP_ROLE=OPERATOR` — default on Netlify (safer than `dev`)
-   - Optional: `AUTH_MODE=dev` if you need the login role picker on a private demo URL
-5. Deploy. Migrations under `netlify/database/migrations/` apply automatically (schema + reference seed). Check `/api/health` — `db` should be `"ok"` and `hasNetlifyDbUrl` should be `true`.
+### Critical: do not paste `Code/.env` into Netlify
 
-**Auth note:** Neither `dev` nor `static` authenticates users. All `/api/*` routes are publicly reachable on the deploy URL. Prefer `static` so clients cannot assert `ADMIN` via `x-app-role`.
+Local `.env` values like `DATABASE_URL=...@localhost:5433` and `SERVICE_TOKEN=dev-service-token` break the deployed API (`ECONNREFUSED 127.0.0.1:5433`).
 
-**Collector:** On Netlify, the sim PLC collector ticks on each `GET /api/tubemill/runs/:id/live` poll (no background timer).
+| Set in Netlify | Do **not** set on Netlify |
+|---|---|
+| Enable **Data & Storage → Database** (injects `NETLIFY_DB_URL`) | `DATABASE_URL=...localhost:5433` — **delete it** |
+| `SERVICE_TOKEN` = any strong secret | `PORT` |
+| `TENANT_ID` (optional) | Docker credentials (`tubemill`/`tubemill`) |
+| `AUTH_MODE=dev` or `static` | |
+| `COLLECTOR_MODE=sim`, `BC_ADAPTER=file` | |
+
+### Steps
+
+1. Production branch = `demo`.
+2. **Data & Storage → Database → Create/Enable**.
+3. **Site configuration → Environment variables** → delete `DATABASE_URL` if it points at localhost.
+4. Set a non-default `SERVICE_TOKEN`.
+5. Redeploy. Check `/api/health` → `"db":"ok"`, `"hasNetlifyDbUrl":true`, `"databaseUrlIsLocalhost":false`.
+
+**Auth note:** Neither `dev` nor `static` authenticates users. All `/api/*` routes are publicly reachable.
+
+**Collector:** On Netlify, the sim PLC collector ticks on each `GET /api/tubemill/runs/:id/live` poll.
 
 Local Docker/dev path is unchanged: `npm run migrate` + `npm run seed` against `docker compose` Postgres.
 
