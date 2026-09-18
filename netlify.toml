@@ -7,7 +7,17 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  external_node_modules = ["express", "pg", "cors", "dotenv", "serverless-http", "@neondatabase/serverless"]
+  external_node_modules = [
+    "express",
+    "pg",
+    "cors",
+    "dotenv",
+    "serverless-http",
+    "@netlify/database",
+    "@netlify/runtime-utils",
+    "@neondatabase/serverless",
+    "ws"
+  ]
 
 # API function must win over the SPA fallback.
 [[redirects]]

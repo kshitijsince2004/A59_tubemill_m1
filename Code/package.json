@@ -15,6 +15,9 @@
     "setup": "npm install && npm run migrate && npm run seed",
     "reset-db": "docker compose down -v && docker compose up -d && npm run migrate && npm run seed"
   },
+  "dependencies": {
+    "@netlify/database": "^2.0.1"
+  },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "typescript": "^5.7.3"

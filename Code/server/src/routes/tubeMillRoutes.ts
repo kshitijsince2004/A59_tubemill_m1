@@ -113,8 +113,23 @@ async function withIdempotency(req: Request, res: Response, next: NextFunction) 
   return next();
 }
 
-router.get('/health', (_req, res) => {
-  ok(res, { status: 'ok', collectorMode: config.collectorMode, bcAdapter: config.bcAdapter });
+router.get('/health', async (_req, res) => {
+  let db: 'ok' | 'error' = 'ok';
+  let dbError: string | undefined;
+  try {
+    await query(`SELECT 1 AS ok`);
+  } catch (err) {
+    db = 'error';
+    dbError = err instanceof Error ? err.message : String(err);
+  }
+  ok(res, {
+    status: db === 'ok' ? 'ok' : 'degraded',
+    db,
+    dbError,
+    hasNetlifyDbUrl: Boolean(process.env.NETLIFY_DB_URL),
+    collectorMode: config.collectorMode,
+    bcAdapter: config.bcAdapter,
+  });
 });
 
 router.get('/tubemill/session', (req, res) => {
