@@ -15,7 +15,7 @@
       "thkMm": 2.6,
       "lengthMm": 6000
     },
-    "qtyPieces": 2400
+    "qtyPieces": 1200
   },
   {
     "id": "qc-002",
@@ -30,10 +30,10 @@
       "profile": "ROUND",
       "odMm": 25.4,
       "equivOdMm": 25.4,
-      "thkMm": 3.0,
+      "thkMm": 3,
       "lengthMm": 6000
     },
-    "qtyPieces": 1800
+    "qtyPieces": 1500
   },
   {
     "id": "qc-003",
@@ -52,6 +52,867 @@
       "thkMm": 1.5,
       "lengthMm": 6000
     },
+    "qtyPieces": 1800
+  },
+  {
+    "id": "qc-004",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1045",
+    "bcBatchNumber": "BC-88424",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2000
+  },
+  {
+    "id": "qc-005",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1046",
+    "bcBatchNumber": "BC-88425",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2200
+  },
+  {
+    "id": "qc-006",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1047",
+    "bcBatchNumber": "BC-88426",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2400
+  },
+  {
+    "id": "qc-007",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1048",
+    "bcBatchNumber": "BC-88427",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2800
+  },
+  {
+    "id": "qc-008",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1049",
+    "bcBatchNumber": "BC-88428",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3000
+  },
+  {
+    "id": "qc-009",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1050",
+    "bcBatchNumber": "BC-88429",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
     "qtyPieces": 3200
+  },
+  {
+    "id": "qc-010",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1051",
+    "bcBatchNumber": "BC-88430",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3600
+  },
+  {
+    "id": "qc-011",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1052",
+    "bcBatchNumber": "BC-88431",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1200
+  },
+  {
+    "id": "qc-012",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1053",
+    "bcBatchNumber": "BC-88432",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1500
+  },
+  {
+    "id": "qc-013",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1054",
+    "bcBatchNumber": "BC-88433",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1800
+  },
+  {
+    "id": "qc-014",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1055",
+    "bcBatchNumber": "BC-88434",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2000
+  },
+  {
+    "id": "qc-015",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1056",
+    "bcBatchNumber": "BC-88435",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2200
+  },
+  {
+    "id": "qc-016",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1057",
+    "bcBatchNumber": "BC-88436",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2400
+  },
+  {
+    "id": "qc-017",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1058",
+    "bcBatchNumber": "BC-88437",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2800
+  },
+  {
+    "id": "qc-018",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1059",
+    "bcBatchNumber": "BC-88438",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3000
+  },
+  {
+    "id": "qc-019",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1060",
+    "bcBatchNumber": "BC-88439",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3200
+  },
+  {
+    "id": "qc-020",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1061",
+    "bcBatchNumber": "BC-88440",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3600
+  },
+  {
+    "id": "qc-021",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1062",
+    "bcBatchNumber": "BC-88441",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1200
+  },
+  {
+    "id": "qc-022",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1063",
+    "bcBatchNumber": "BC-88442",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1500
+  },
+  {
+    "id": "qc-023",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1064",
+    "bcBatchNumber": "BC-88443",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1800
+  },
+  {
+    "id": "qc-024",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1065",
+    "bcBatchNumber": "BC-88444",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2000
+  },
+  {
+    "id": "qc-025",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1066",
+    "bcBatchNumber": "BC-88445",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2200
+  },
+  {
+    "id": "qc-026",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1067",
+    "bcBatchNumber": "BC-88446",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2400
+  },
+  {
+    "id": "qc-027",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1068",
+    "bcBatchNumber": "BC-88447",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2800
+  },
+  {
+    "id": "qc-028",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1069",
+    "bcBatchNumber": "BC-88448",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3000
+  },
+  {
+    "id": "qc-029",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1070",
+    "bcBatchNumber": "BC-88449",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3200
+  },
+  {
+    "id": "qc-030",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1071",
+    "bcBatchNumber": "BC-88450",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3600
+  },
+  {
+    "id": "qc-031",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1072",
+    "bcBatchNumber": "BC-88451",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1200
+  },
+  {
+    "id": "qc-032",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1073",
+    "bcBatchNumber": "BC-88452",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1500
+  },
+  {
+    "id": "qc-033",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1074",
+    "bcBatchNumber": "BC-88453",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1800
+  },
+  {
+    "id": "qc-034",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1075",
+    "bcBatchNumber": "BC-88454",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2000
+  },
+  {
+    "id": "qc-035",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1076",
+    "bcBatchNumber": "BC-88455",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2200
+  },
+  {
+    "id": "qc-036",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1077",
+    "bcBatchNumber": "BC-88456",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2400
+  },
+  {
+    "id": "qc-037",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1078",
+    "bcBatchNumber": "BC-88457",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2800
+  },
+  {
+    "id": "qc-038",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1079",
+    "bcBatchNumber": "BC-88458",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3000
+  },
+  {
+    "id": "qc-039",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1080",
+    "bcBatchNumber": "BC-88459",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3200
+  },
+  {
+    "id": "qc-040",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1081",
+    "bcBatchNumber": "BC-88460",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3600
+  },
+  {
+    "id": "qc-041",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1082",
+    "bcBatchNumber": "BC-88461",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1200
+  },
+  {
+    "id": "qc-042",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1083",
+    "bcBatchNumber": "BC-88462",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1500
+  },
+  {
+    "id": "qc-043",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1084",
+    "bcBatchNumber": "BC-88463",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 1800
+  },
+  {
+    "id": "qc-044",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1085",
+    "bcBatchNumber": "BC-88464",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2000
+  },
+  {
+    "id": "qc-045",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1086",
+    "bcBatchNumber": "BC-88465",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2200
+  },
+  {
+    "id": "qc-046",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1087",
+    "bcBatchNumber": "BC-88466",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2400
+  },
+  {
+    "id": "qc-047",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1088",
+    "bcBatchNumber": "BC-88467",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 2800
+  },
+  {
+    "id": "qc-048",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1089",
+    "bcBatchNumber": "BC-88468",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": {
+      "profile": "SECTION",
+      "aMm": 40,
+      "bMm": 25,
+      "equivOdMm": 41.28,
+      "thkMm": 1.5,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3000
+  },
+  {
+    "id": "qc-049",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1090",
+    "bcBatchNumber": "BC-88469",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 2.6,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3200
+  },
+  {
+    "id": "qc-050",
+    "millCode": "A-59",
+    "status": "Pending",
+    "workOrderNo": "WO-2026-1091",
+    "bcBatchNumber": "BC-88470",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "sizeKey": "OD25.4",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 25.4,
+      "equivOdMm": 25.4,
+      "thkMm": 3,
+      "lengthMm": 6000
+    },
+    "qtyPieces": 3600
   }
 ]
