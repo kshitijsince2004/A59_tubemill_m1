@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "process": "DRW",
+  "reportCode": "LINE-LOG-DB",
+  "title": "A-59 Draw Bench Line Log",
+  "sheets": [
+    {
+      "name": "LineLog",
+      "columns": [
+        { "key": "lotNo", "header": "Lot No" },
+        { "key": "workOrderNo", "header": "WO" },
+        { "key": "benchCode", "header": "Bench" },
+        { "key": "gradeCode", "header": "Grade" },
+        { "key": "status", "header": "Status" },
+        { "key": "createdAt", "header": "Created" }
+      ]
+    }
+  ]
+}

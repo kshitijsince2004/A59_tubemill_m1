@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "process": "FUR",
+  "reportCode": "LINE-LOG-FUR",
+  "title": "A-59 Furnace Line Log",
+  "sheets": [
+    {
+      "name": "LineLog",
+      "columns": [
+        { "key": "prodDate", "header": "Date" },
+        { "key": "chargeNo", "header": "Charge No" },
+        { "key": "workOrderNo", "header": "WO" },
+        { "key": "furnaceCode", "header": "Furnace" },
+        { "key": "gradeCode", "header": "Grade" },
+        { "key": "totalNos", "header": "Nos" },
+        { "key": "totalMt", "header": "MT" },
+        { "key": "status", "header": "Status" }
+      ]
+    }
+  ]
+}

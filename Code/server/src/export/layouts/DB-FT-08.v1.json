@@ -1,0 +1,35 @@
+{
+  "report": "DB-FT-08",
+  "version": 1,
+  "sheet": "DB-FT-08",
+  "titleBlock": {
+    "date": "F2",
+    "shift": "F3"
+  },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "bench_code": "A",
+      "tube_od": "B",
+      "tube_id": "C",
+      "tube_thk": "D",
+      "die_code": "E",
+      "die_stage": "F",
+      "die_size_mm": "G",
+      "tube_od_first_off": "H",
+      "die_condition": "I",
+      "plug_stage": "J",
+      "plug_size_mm": "K",
+      "plug_condition": "L"
+    }
+  },
+  "footer": {
+    "sign": "B30"
+  },
+  "numberFormats": {
+    "die_size_mm": "0.00",
+    "tube_od_first_off": "0.00"
+  }
+}

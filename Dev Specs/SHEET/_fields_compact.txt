@@ -1,0 +1,331 @@
+## TubeMill (122 fields)
+Class: {'SYSTEM': 2, 'DERIVED': 53, 'MANUAL': 44, 'AUTO': 20, 'AUTO/MANUAL': 3}
+Tables: ['txn.prod_tm_run', 'txn.prod_tm_coil_input', 'txn.tm_setup', 'txn.prod_tm_param_snapshot', 'plc.sample', 'txn.prod_tm_bundle', '(reporting)', 'txn.stoppage_entry', 'txn.tm_online_inspection', 'txn.tm_consumable_usage']
+
+RUN-01|Run header|Run number|run_no|txn.prod_tm_run|text|-|SYSTEM|mill + setup ts|Y|unique per tenant|capture-unit id
+RUN-02|Run header|Tube Mill No|mill_code|txn.prod_tm_run|text|-|DERIVED|assignment / context|Y|FK master.machine|A-59 first
+RUN-03|Run header|W.O. No|work_order_no|txn.prod_tm_run|text|-|DERIVED|work order (BC)|Y|dedup w/ batch|queue card = 1 run
+RUN-04|Run header|Batch number|bc_batch_number|txn.prod_tm_run|text|-|DERIVED|work order (BC)|N|dedup key|plan/journey merge
+RUN-05|Run header|Customer|customer_code|txn.prod_tm_run|text|-|DERIVED|work order (BC)|N|FK master.customer|
+RUN-06|Run header|RM Grade / Source|grade_code|txn.prod_tm_run|text|-|DERIVED|work order / coil|Y|FK master.grade|also on coil input
+RUN-07|Run header|Size (OD / Section)|size (jsonb)|txn.prod_tm_run|json|mm|DERIVED|work order / TM-02|Y|round or section|section -> equiv OD
+RUN-08|Run header|Thickness|size.thkMm / swg|txn.prod_tm_run|number|mm|DERIVED|work order|Y|>0|mm + SWG
+RUN-09|Run header|Length|size.lengthMm|txn.prod_tm_run|number|mm|DERIVED|work order|N|>0|
+RUN-10|Run header|Shift|shift_open_ref|txn.prod_tm_run|text|-|DERIVED|shift context|Y|FK master.shift|run may span shifts
+RUN-11|Run header|Date|prod_date|txn.prod_tm_run|date|-|DERIVED|shift|Y|-|
+COIL-01|Run/coil feed|Coil tag / slit no|coil_tag|txn.prod_tm_coil_input|text|-|MANUAL|operator scan|Y|-|input fan
+COIL-02|Run/coil feed|Coil width|width_mm|txn.prod_tm_coil_input|number|mm|DERIVED|coil master|N|>0|
+COIL-03|Run/coil feed|Coil thickness|thk_mm / swg|txn.prod_tm_coil_input|number|mm|DERIVED|coil master|N|>0|
+COIL-04|Run/coil feed|Grade / source|grade_code / source|txn.prod_tm_coil_input|text|-|DERIVED|coil master|Y|FK master.grade|
+COIL-05|Run/coil feed|Input weight|input_weight_kg|txn.prod_tm_coil_input|number|Kg|DERIVED|coil master|Y|>0|sum = raw_material_mt
+COIL-06|Run/coil feed|Splice sequence|splice_seq|txn.prod_tm_coil_input|int|-|SYSTEM|order fed|N|-|
+COIL-07|Run/coil feed|Joint drill marker|joint_marker|txn.prod_tm_coil_input|bool|-|MANUAL|welder|N|-|ECT joint-tube scrap
+SET-01|1 Setup approval|Setup type|setup_type|txn.tm_setup|enum|-|MANUAL|operator|Y|INITIAL|REGULAR|
+SET-02|1 Setup approval|Reason|reason|txn.tm_setup|enum|-|MANUAL|operator|N|NEW_PRODUCT|SIZE_CHANGE|SHIFT_CHANGE|POWER_FAILURE|BREAKDOWN|ROLL_CHANGE|
+SET-03|1 Setup approval|ID Tool size|id_tool|txn.tm_setup|text|-|DERIVED|TM-02 chart|Y|confirm/override logged|from tooling chart
+SET-04|1 Setup approval|OD Tool size|od_tool|txn.tm_setup|text|-|DERIVED|TM-02 chart|Y|confirm/override logged|
+SET-05|1 Setup approval|Boggie size|boggie_size|txn.tm_setup|text|-|DERIVED|TM-02 chart|Y|-|
+SET-06|1 Setup approval|Impeder size|impeder_size|txn.tm_setup|text|-|DERIVED|TM-02 chart|Y|-|
+SET-07|1 Setup approval|Ferrite rod|ferrite_rod|txn.tm_setup|text|-|DERIVED|TM-02 chart|N|-|
+SET-08|1 Setup approval|SS rod|ss_rod|txn.tm_setup|text|-|DERIVED|TM-02 chart|N|-|
+SET-09|1 Setup approval|Work coil ID|work_coil_id|txn.tm_setup|text|-|DERIVED|TM-02 + consumable|Y|FK master.tm_consumable|links tooling life
+SET-10|1 Setup approval|Fin blade / seam guide|fin_blade / seam_guide|txn.tm_setup|text|-|DERIVED|TM-02 fin table|N|-|
+SET-11|1 Setup approval|Weld dia|weld_dia_mm|txn.tm_setup|number|mm|DERIVED|TM-02 norm + measured|N|per fin-pass table|welder VEE data assists
+SET-12|1 Setup approval|Distance WC to WR|wc_to_wr_distance_mm|txn.tm_setup|number|mm|MANUAL|operator|Y|70-160 mm (WI)|V length/angle
+SET-13|1 Setup approval|V length|v_length_mm|txn.tm_setup|number|mm|MANUAL|operator|N|per WI annexure|welder exports VEE LENGTH (AUTO xcheck)
+SET-14|1 Setup approval|V gap|v_gap_mm|txn.tm_setup|number|mm|MANUAL|operator|N|per norm|
+SET-15|1 Setup approval|Bead / weld-flow check|weld_flow_ok|txn.tm_setup|text|-|MANUAL|operator/QA|Y|reference sample compare|weld flow each new setup
+SET-16|1 Setup approval|Use of argon|argon_used|txn.tm_setup|bool|-|DERIVED|grade|N|special grades ST-52, SPL-K3, 1536/1541, Corten|
+SET-17|1 Setup approval|ECT calibration (1.5mm hole)|ect_calibrated|txn.tm_setup|bool|-|MANUAL|QA|Y|auto-sort + red paint working|
+SET-18|1 Setup approval|First-off result|first_off_result|txn.tm_setup|enum|-|MANUAL|SIC / QA|Y|PASS|FAIL|GATE: RUNNING needs PASS
+SET-19|1 Setup approval|First-off approver|approved_by|txn.tm_setup|text|-|MANUAL|SIC / QA|Y|L3 setup, SIC/QA approve|
+SET-20|1 Setup approval|4M change|is_4m_change / m4_category|txn.tm_setup|enum|-|MANUAL|operator/SIC|N|MAN|MATERIAL|MACHINE|METHOD|validation + customer approval + tag stamp
+SET-21|1 Setup approval|Fin-pass rolls 13/15/17/19/20 (spec vs obs)|fin_pass_dims|txn.tm_setup|json|mm|DERIVED|TM-02 fin table|Y|tol -0.20/+0.70|observed recorded on TM-05
+SET-22|1 Setup approval|Weld roll dia (21)|weld_roll_dia_mm|txn.tm_setup|number|mm|DERIVED|TM-02|N|tol -0.20/+0.50|
+SET-23|1 Setup approval|Coolant concentration|coolant_conc_pct|txn.tm_setup|number|%|MANUAL|operator|Y|2.0% min CEW, 3% min ERW|on TM-05
+SET-24|1 Setup approval|First-off dims (OD/THK/Len/Fin ht)|first_off_dims|txn.tm_setup|json|mm|MANUAL|QA|Y|per WO|TM-05 first-off block
+SET-25|1 Setup approval|First-off form (Ovality/Straightness/Flattening/Drifting)|first_off_form|txn.tm_setup|json|-|MANUAL|QA|Y|flattening 2t min; drifting 12.5% min|on TM-05
+SET-26|1 Setup approval|Weld flow / surface / V angle|weld_flow_surface_vangle|txn.tm_setup|text|-|MANUAL|QA|Y|weld flow each new setup|on TM-05
+PRC-01|2 Online process|Date|prod_date|txn.prod_tm_param_snapshot|date|-|DERIVED|shift|Y|-|
+PRC-02|2 Online process|Shift|shift_ref|txn.prod_tm_param_snapshot|text|-|DERIVED|shift|Y|FK master.shift|
+PRC-03|2 Online process|Time (hourly + each restart)|ts_hour|txn.prod_tm_param_snapshot|ts|-|AUTO|server rollup|Y|hourly + restart|
+PRC-04|2 Online process|OD|size.equivOdMm|txn.prod_tm_run|number|mm|DERIVED|run (welder xcheck)|Y|-|welder reports OD
+PRC-05|2 Online process|THK|size.thkMm|txn.prod_tm_run|number|mm|DERIVED|run (welder xcheck)|Y|-|welder reports WALL
+PRC-06|2 Online process|Mat grade|grade_code|txn.prod_tm_run|text|-|DERIVED|run|Y|-|
+PRC-07|2 Online process|Speed (MPM)|line_speed_mpm|txn.prod_tm_param_snapshot|number|mpm|AUTO|welder SPEED mpm|Y|in TM-02 speed band|confirmed streaming
+PRC-08|2 Online process|Power (KW)|weld_power_kw|txn.prod_tm_param_snapshot|number|kW|AUTO|welder POWER kW|Y|in TM-02 power band|band check; confirmed
+PRC-09|2 Online process|ID tool size|id_tool|txn.tm_setup|text|-|DERIVED|setup (TM-02)|Y|-|
+PRC-10|2 Online process|OD tool size|od_tool|txn.tm_setup|text|-|DERIVED|setup (TM-02)|Y|-|
+PRC-11|2 Online process|Work coil ID|work_coil_id|txn.tm_setup|text|-|DERIVED|setup|Y|-|
+PRC-12|2 Online process|Impeder size|impeder_size|txn.tm_setup|text|-|DERIVED|setup (TM-02)|Y|-|
+PRC-13|2 Online process|Boggie size|boggie_size|txn.tm_setup|text|-|DERIVED|setup (TM-02)|N|-|
+PRC-14|2 Online process|Weld dia|weld_dia_mm|txn.tm_setup|number|mm|DERIVED|setup|N|-|
+PRC-15|2 Online process|Distance WC to WR|wc_to_wr_distance_mm|txn.tm_setup|number|mm|MANUAL|setup carry|N|70-160 mm|
+PRC-16|2 Online process|Oil % in coolant (min 3.0)|coolant_oil_pct|txn.prod_tm_param_snapshot|number|%|MANUAL|operator titration|Y|ERW >=3.0% special (WI)|
+PRC-17|2 Online process|Coolant pressure (min)|coolant_pressure_kg|txn.prod_tm_param_snapshot|number|kg/mm2|AUTO/MANUAL|utility PLC if wired|Y|>=2.0 (WI)|no wired sensor found -> likely MANUAL
+PRC-18|2 Online process|Use of argon Y/N|argon_used|txn.prod_tm_param_snapshot|bool|-|DERIVED|setup / operator|N|-|
+PRC-19|2 Online process|Wiper change / clean|wiper_change|txn.prod_tm_param_snapshot|bool|-|MANUAL|operator|N|-|
+PRC-20|2 Online process|Remarks|remarks|txn.prod_tm_param_snapshot|text|-|MANUAL|operator|N|-|
+PRC-21|2 Online process|Sign|sign_ref|txn.prod_tm_param_snapshot|text|-|MANUAL|operator|N|-|
+PRC-22|2 Online process|Frequency (kHz) [bonus]|weld_frequency_khz|plc.sample|number|kHz|AUTO|welder|N|-|telemetry beyond paper sheet
+PRC-23|2 Online process|Current % / Voltage % [bonus]|weld_current_pct / voltage_pct|plc.sample|number|%|AUTO|welder|N|-|telemetry beyond paper sheet
+PRC-24|2 Online process|KW monitor status/stored/offset [bonus]|kw_band_*|plc.sample|mixed|-|AUTO|welder|N|reconcile vs TM-02|welder's own KW band
+PRD-01|3 Production|W.O. No|work_order_no|txn.prod_tm_run|text|-|DERIVED|work order|Y|-|
+PRD-02|3 Production|Size (OD/THK/Length)|size|txn.prod_tm_run|json|mm|DERIVED|work order|Y|-|
+PRD-03|3 Production|Slit No|source / coil ref|txn.prod_tm_coil_input|text|-|DERIVED|journey / plan|N|-|
+PRD-04|3 Production|Customer|customer_code|txn.prod_tm_run|text|-|DERIVED|work order|N|-|
+PRD-05|3 Production|RM Grade / Source|grade_code|txn.prod_tm_run|text|-|DERIVED|work order / coil|Y|-|
+PRD-06|3 Production|Prime - No|pieces (class=PRIME)|txn.prod_tm_bundle|int|pcs|AUTO|COC saw count|Y|>=0|class set by operator
+PRD-07|3 Production|Prime - Wt|weight_kg (PRIME)|txn.prod_tm_bundle|number|Kg|DERIVED|count x theoretical wt|Y|>=0|MEASURED if weighed
+PRD-08|3 Production|PQ2 - No (Joint/Other)|pieces + pq2_reason|txn.prod_tm_bundle|int|pcs|MANUAL|operator class|N|reason JOINT|OTHER|
+PRD-09|3 Production|PQ2 - Wt|weight_kg (PQ2)|txn.prod_tm_bundle|number|Kg|DERIVED|count x theoretical|N|>=0|
+PRD-10|3 Production|CQ - No|pieces (class=CQ)|txn.prod_tm_bundle|int|pcs|MANUAL|operator class|N|>=0|
+PRD-11|3 Production|CQ - Wt|weight_kg (CQ)|txn.prod_tm_bundle|number|Kg|DERIVED|count x theoretical|N|>=0|
+PRD-12|3 Production|Open - No|pieces (class=OPEN)|txn.prod_tm_bundle|int|pcs|MANUAL|operator class|N|>=0|
+PRD-13|3 Production|Open - Wt|weight_kg (OPEN)|txn.prod_tm_bundle|number|Kg|DERIVED|count x theoretical|N|>=0|
+PRD-14|3 Production|Total - No|sum pieces|txn.prod_tm_run|int|pcs|AUTO|rollup|Y|-|
+PRD-15|3 Production|Total - Wt|sum weight|txn.prod_tm_run|number|MT|AUTO|rollup|Y|-|
+PRD-16|3 Production|Total Raw Mat|raw_material_mt|txn.prod_tm_run|number|MT|AUTO|sum coil inputs|Y|-|yield denominator
+PRD-17|3 Production|Total Scrap (setup+joint)|total_scrap_mt|txn.prod_tm_run|number|MT|AUTO/MANUAL|setup pieces auto-scrap|Y|-|
+PRD-18|3 Production|Totals Prime/PQ2/CQ/Open|total_*_mt|txn.prod_tm_run|number|MT|AUTO|rollup|Y|-|
+PRD-19|3 Production|Cumulative (MTD)|MTD rollup|(reporting)|number|MT|AUTO|running total|Y|-|
+PRD-20|3 Production|Yield|yield_pct|txn.prod_tm_run|number|%|AUTO|accepted / raw|Y|0-100|mass-balance warn
+PRD-21|3 Production|Hourly production/energy [bonus]|prod_ton / energy_kwh / cost_inr|plc.sample|number|ton,kWh,INR|AUTO|welder hourly export|N|-|energy KPI + tonnage xcheck
+DWN-01|4 Downtime|Starting time|start_ts|txn.stoppage_entry|ts|-|AUTO|collector (line stop)|Y|-|welder MESSAGE interim signal
+DWN-02|4 Downtime|Stopping time|stop_ts|txn.stoppage_entry|ts|-|AUTO|collector (line start)|Y|-|
+DWN-03|4 Downtime|Running time|running_min|txn.stoppage_entry|number|min|AUTO|derived|Y|-|
+DWN-04|4 Downtime|Reasons|reason|txn.stoppage_entry|text|-|MANUAL|operator|Y|-|
+DWN-05|4 Downtime|Time lost|time_lost|txn.stoppage_entry|number|min|AUTO|stop - start|Y|-|
+DWN-06|4 Downtime|Code No|stoppage_code|txn.stoppage_entry|text|-|MANUAL|operator|Y|FK master.stoppage_code|O-1: code list needed
+DWN-07|4 Downtime|Remark|remark|txn.stoppage_entry|text|-|MANUAL|operator|N|-|
+DWN-08|4 Downtime|S.T. Total|st_total_min|txn.stoppage_entry|number|min|AUTO|sum time lost|Y|-|
+INS-01|5 Online inspection|Lot No / Coil No(s)|lot_no / coil_no|txn.tm_online_inspection|text|-|DERIVED|run / coil feed|Y|-|GLI-FT-QA-04 identification
+INS-02|5 Online inspection|OD / WD & HT|od_meas_mm|txn.tm_online_inspection|number|mm|MANUAL|QA|Y|per WO tolerance|welder OD is reference
+INS-03|5 Online inspection|Thickness (Min / Max)|thk_min_max_mm|txn.tm_online_inspection|number|mm|MANUAL|QA|Y|per WO tolerance|micrometer 0-225 bands
+INS-04|5 Online inspection|Length|len_meas_mm|txn.tm_online_inspection|number|mm|MANUAL|QA|Y|per WO|
+INS-05|5 Online inspection|FC / NFC|fin_cut_class|txn.tm_online_inspection|enum|-|MANUAL|QA|Y|FC|NFC|fin-cut / no-fin-cut
+INS-06|5 Online inspection|ID finish height|id_finish_ht_mm|txn.tm_online_inspection|number|mm|MANUAL|QA|N|-|inside weld upset
+INS-07|5 Online inspection|Straightness|straightness|txn.tm_online_inspection|number|mm|MANUAL|QA|N|-|weld test
+INS-08|5 Online inspection|Drift %|drift_pct|txn.tm_online_inspection|number|%|MANUAL|QA|N|0t/t/2t/3t|
+INS-09|5 Online inspection|Flattening 0 / 90|flatten_0_90|txn.tm_online_inspection|text|-|MANUAL|QA|N|2t min|weld test
+INS-10|5 Online inspection|UT / ECT (U/E)|ut_ect_result|txn.tm_online_inspection|enum|-|AUTO/MANUAL|ECT if tapped|Y|0t/t/2t/3t; red-paint reject|AUTO if ECT signal wired
+INS-11|5 Online inspection|Surface defect (scratch/tool/roll mark/pick up)|surface_defect|txn.tm_online_inspection|text|-|MANUAL|operator/QA|Y|-|
+INS-12|5 Online inspection|Gauge check (OK / Not OK)|gauge_result|txn.tm_online_inspection|enum|-|MANUAL|QA|N|ball/pin/vernier/mandrel/plug/snap|micrometer 0-225
+INS-13|5 Online inspection|Class split (Prime/PQ2/CQ/Open/Joints)|qa_class|txn.tm_online_inspection|enum|-|MANUAL|QA|Y|-|QA-04 disposition block
+INS-14|5 Online inspection|Customer / WO / final size-grade|work_order_no / final_size|txn.tm_online_inspection|text|-|DERIVED|work order|Y|-|
+SLI-01|6 Slit inspection|W.O. Number|work_order_no|txn.prod_tm_coil_input|text|-|DERIVED|work order|Y|-|GLI-FT-PRD-TM-01
+SLI-02|6 Slit inspection|Slit No|coil_tag / slit_no|txn.prod_tm_coil_input|text|-|MANUAL|operator|Y|-|
+SLI-03|6 Slit inspection|Weight|input_weight_kg|txn.prod_tm_coil_input|number|MT|DERIVED|coil master|N|>0|
+SLI-04|6 Slit inspection|Hardness (coil) HRB|hardness_hrb|txn.prod_tm_coil_input|number|HRB|MANUAL|operator / lab|N|-|
+SLI-05|6 Slit inspection|Grade & source|grade_code / source|txn.prod_tm_coil_input|text|-|DERIVED|coil master|Y|FK master.grade|
+SLI-06|6 Slit inspection|Strip width (Start/Mid/End)|width_sme_mm|txn.prod_tm_coil_input|number|mm|MANUAL|operator|Y|per WO tol|3 readings
+SLI-07|6 Slit inspection|Thickness (Start/Mid/End)|thk_sme_mm|txn.prod_tm_coil_input|number|mm|MANUAL|operator|Y|per WO tol|3 readings
+SLI-08|6 Slit inspection|Rejection + reasons|rejection_reason|txn.prod_tm_coil_input|text|-|MANUAL|operator|N|-|
+TL-01|Tooling life (TM-FT-08)|Work coil in use|work_coil_id|txn.tm_consumable_usage|text|-|DERIVED|setup|Y|FK master.tm_consumable|
+TL-02|Tooling life (TM-FT-08)|Tonnage rolled / cumulative|cumulative_tonnage_mt|txn.tm_consumable_usage|number|MT|AUTO|usage counter|Y|vs threshold -> change-due|
+TL-03|Tooling life (TM-FT-08)|Visual inspection / action|visual_inspection / action|txn.tm_consumable_usage|text|-|MANUAL|operator|N|-|
+
+### Sheet Map
+  1. Setup approval report || GLI-FT-PRD-TM-05 Mill Setup Parameter Sheet || R1 || Yes (now in hand) || Per-run gate (setup + first-off) || txn.tm_setup || Fin-pass rolls + first-off dims specified vs observed; tooling DERIVED; weld setup MANUAL; first-off gate MANUAL
+  2. Online process report || GLI-FT-PRD-TM-04 Mill Parameter Record || R2 || Yes || Hourly, running || txn.prod_tm_param_snapshot (+ tm_setup) || Speed + power AUTO (welder); tooling DERIVED; coolant/wiper/argon MANUAL
+  3. Production report || GLI-FT-PRD-TM-02 Daily Production Report || R3 || Yes || Per work order || txn.prod_tm_run + txn.prod_tm_bundle || Piece count AUTO (COC); quality class MANUAL; weight DERIVED; totals + yield AUTO
+  4. Downtime report || GLI-FT-PRD-TM-03 Down Time Report || R2 || Yes || Per stoppage || txn.stoppage_entry || Times AUTO (collector); reason + code MANUAL
+  5. Online inspection report || GLI-FT-QA-04 Online Quality Inspection Report at Tube Mill || R4 || Yes (now in hand) || Running, QA (dims / weld / UT-ECT / surface) || txn.tm_online_inspection || Dimensions/weld/surface MANUAL; UT/ECT AUTO if tapped
+  6. Slit inspection (incoming) || GLI-FT-PRD-TM-01 Daily Slit Inspection Report || R3 || Yes (now in hand) || Per slit at mill entry || txn.prod_tm_coil_input || Strip width + thickness start/mid/end MANUAL; hardness MANUAL
+  Work Instruction || TM-01 (GLI-WI-PRD-TM-01) || R18 || Yes || Process logic (setup, first-off, 4M, weld flow) || txn.tm_setup || Drives the gate + tooling logic
+  Production parameters (master) || TM-02 (GLI-WI-PRD51-TM-02) || R18 || Yes || Size/grade -> power window + tooling || master.tm_param_chart || Reference master (see TM-02 tabs)
+  Work coil history card || TM-FT-08 || R0 || Yes || Tooling life || master.tm_consumable + txn.tm_consumable_usage || Tonnage AUTO; inspection MANUAL
+  Arc welding current || GLI-FT-TM-11 || R0 || Referenced || Strip-joint arc weld current || txn.tm_arcweld_log || AUTO if wired else MANUAL; feature-flagged
+  Edge milling inspection (LDP) || GLI-FT-TM-12 || R1 || Yes || Strip edge width before/after || txn.prod_tm_edgemill || Widths + condition MANUAL
+
+### Codes
+  Quality class || PRIME || first quality
+  Quality class || PQ2 (JOINT | OTHER) || prime second; sub-reason joint or other
+  Quality class || CQ || commercial quality
+  Quality class || OPEN || open weld
+  Quality class || SCRAP || setup, joint, crop, trim
+  Grade || 1006 / 1010 / 1020 / 1026 || carbon steel
+  Grade || ST-52 / SPL-K3 / 1536 / 1541 / Corten || special -> argon at weld
+  Grade || BSK-46 / GR-50 / GR2 / E250 / E034 || other order grades
+  Stoppage category || OPN / ELECT / MECH / UTILITY / POWER / PLANNED / OTHER || map TM-FT-03 codes to these (O-1)
+  Setup type || INITIAL | REGULAR || 
+  Setup reason || NEW_PRODUCT | SIZE_CHANGE | SHIFT_CHANGE | POWER_FAILURE | BREAKDOWN | ROLL_CHANGE || 
+  4M category || MAN | MATERIAL | MACHINE | METHOD || 
+  Run state || IDLE | SETUP | FIRST_OFF_PENDING | RUNNING | STOPPAGE | ROLL_CHANGE | RUN_COMPLETE || mill state machine
+  Weight source || DERIVED | MEASURED || derived = count x theoretical
+  Record status || DRAFT | SUBMITTED | APPROVED | LOCKED || capture lifecycle
+  Consumable kind || WORK_COIL | CUTTER | ROLL_SET | IMPEDER | FIN_BLADE || tooling life
+  Mill / saw || A-59 [survey] | TM-01 cold 325-400 | TM-02 flying 550-700 | TM-03 flying 550-700 | TM-04 cold 425-500 || cutter dia mm
+  Weld-line width || ERW 0.05-0.30 mm | CEW 0.05 mm max || magnification 8X-25X by thickness (TM-01)
+
+## Furnace (27 fields)
+Class: {'SYSTEM': 1, 'DERIVED': 7, 'MANUAL': 4, 'AUTO': 8, 'AUTO/MANUAL': 6, 'MANUAL/AUTO': 1}
+Tables: ['txn.prod_ann_run', 'txn.ann_gas_log']
+
+ANN-01|Run header|Charge / lot id|charge_no|txn.prod_ann_run|text|-|SYSTEM|furnace + ts|Y|unique per tenant|batch entry
+ANN-02|Run header|Furnace (RHF) no|furnace_code|txn.prod_ann_run|text|-|DERIVED|assignment|Y|FK master.machine|RHF-03/04/05 on A-59
+ANN-03|Run header|Customer|customer_code|txn.prod_ann_run|text|-|DERIVED|work order|N|FK master.customer|
+ANN-04|Run header|OD x THK x Length|size|txn.prod_ann_run|json|mm|DERIVED|work order|Y|-|
+ANN-05|Run header|Work Order / PO No|work_order_no|txn.prod_ann_run|text|-|DERIVED|work order (BC)|Y|-|
+ANN-06|Run header|Specification / Grade|grade_code|txn.prod_ann_run|text|-|DERIVED|work order|Y|FK master.grade|selects HT recipe
+ANN-07|1 Furnace prod|No. of tubes|tube_count|txn.prod_ann_run|int|pcs|MANUAL|operator|Y|>=0|charge count
+ANN-08|1 Furnace prod|Heat treatment (type)|ht_type|txn.prod_ann_run|enum|-|DERIVED|grade / recipe|Y|ANNEAL|NORMALIZE|SRA|per grade
+ANN-09|1 Furnace prod|Temperature Zone I (Min/Max)|zone1_min/max_c|txn.prod_ann_run|number|C|AUTO|RHF SCADA|Y|soaking +/-10 C|zone temp
+ANN-10|1 Furnace prod|Temperature Zone II (Min/Max)|zone2_min/max_c|txn.prod_ann_run|number|C|AUTO|RHF SCADA|Y|+/-10 C|
+ANN-11|1 Furnace prod|Temperature Zone III (Min/Max)|zone3_min/max_c|txn.prod_ann_run|number|C|AUTO|RHF SCADA|Y|+/-10 C|
+ANN-12|1 Furnace prod|Temperature Zone IV (Min/Max)|zone4_min/max_c|txn.prod_ann_run|number|C|AUTO|RHF SCADA|Y|+/-10 C|
+ANN-13|1 Furnace prod|Temperature Zone V (Min/Max)|zone5_min/max_c|txn.prod_ann_run|number|C|AUTO|RHF SCADA|Y|+/-10 C|
+ANN-14|1 Furnace prod|Temperature Zone VI (Min/Max)|zone6_min/max_c|txn.prod_ann_run|number|C|AUTO|RHF SCADA|Y|+/-10 C|6 zones on ANN-FT-01
+ANN-15|1 Furnace prod|Line speed (running)|line_speed_mhr|txn.prod_ann_run|number|m/hr|AUTO|RHF SCADA|Y|+/-2 m/hr|charge speed
+ANN-16|1 Furnace prod|Total (Nos / MT)|total_nos / total_mt|txn.prod_ann_run|number|pcs,MT|AUTO|rollup|Y|-|
+ANN-17|1 Furnace prod|Gas consumption PNG (A/B/C)|png_consumption|txn.prod_ann_run|number|Nm3|AUTO/MANUAL|meter if wired|N|-|furnace fuel
+ANN-18|1 Furnace prod|Gas consumption NH3|nh3_consumption|txn.prod_ann_run|number|kg|AUTO/MANUAL|meter if wired|N|-|cracked NH3 (N2 route)
+ANN-19|1 Furnace prod|Remarks|remarks|txn.prod_ann_run|text|-|MANUAL|operator|N|-|
+ANN-20|1 Furnace prod|Batch gap (300mm lot / 6000mm batch)|batch_gap_ok|txn.prod_ann_run|bool|-|MANUAL/AUTO|operator / SCADA|N|300 mm lots, 6000 mm batches|charge spacing
+ANN-21|1 Furnace prod|Reject / quarantine|disposition|txn.prod_ann_run|enum|-|MANUAL|operator/QA|N|reject/quarantine, no rework|
+GAS-01|2/3 Gas plant|Atmosphere type|gas_type|txn.ann_gas_log|enum|-|DERIVED|furnace|Y|N2-PSA | EXO|N2 -> RHF-04/05; EXO -> RHF-03
+GAS-02|2/3 Gas plant|Hourly gas params (full list)|gas_params (jsonb)|txn.ann_gas_log|json|mixed|AUTO/MANUAL|plant PLC / hourly log|Y|per Gas Plant Params tab|see Gas Plant Params tab
+GAS-03|2/3 Gas plant|Dew point|dew_point_c|txn.ann_gas_log|number|C|AUTO/MANUAL|plant|Y|N2: -40 to -110; EXO: +20 to -45|atmosphere quality
+GAS-04|2/3 Gas plant|Final H2 %|h2_pct|txn.ann_gas_log|number|%|AUTO/MANUAL|plant|Y|N2: 1-10; EXO: 0.10-5.0|
+GAS-05|2/3 Gas plant|O2 product gas (ppm)|o2_ppm|txn.ann_gas_log|number|ppm|AUTO/MANUAL|plant|Y|0-10|
+GAS-06|2/3 Gas plant|Dryer / tower change-over time (N2)|changeover_time|txn.ann_gas_log|ts|-|MANUAL|operator|N|-|N2 PSA only
+
+### Sheet Map
+  1. Furnace production report || GLI-FT-PRD-ANN-01 (ANN-FT-01) || R4 || Yes || Per charge / lot || txn.prod_ann_run || 6-zone temps + speed AUTO (SCADA); no. of tubes + HT type DERIVED/MANUAL; gas consumption metered
+  2. N2 PSA gas plant log || GLI-FT-PRD-GAS PLANT-01 || R4 || Yes || Hourly || txn.ann_gas_log || Pressures/temps/flows/dew point/H2% - AUTO if plant PLC else manual hourly log
+  3. EXO gas plant log || GLI-FT-PRD-GAS PLANT-02 || R1 || Yes || Hourly || txn.ann_gas_log || PNG/air/combustion/chiller/H2%/dew point - AUTO if plant PLC else manual
+  Work Instruction (all furnaces) || GLI-WI-PRD-ANN-01 || R18 || Yes || Process logic + gas plant || - || SCADA-driven; zone temps, speed, batch
+  Temp / speed charts || ANN-02 / ANN-03 (RHF-3&4) / ANN-04 || R06+ || In WI || Heat-treat recipe per grade || master.ann_recipe || seed the recipe master
+  Shift check sheet || GLI-ST-PRD-ANN-03 || - || Referenced, not shared || Per shift start || txn.ann_shift_check || gap
+
+### Codes
+  Furnaces (A-59) || RHF-03 | RHF-04 | RHF-05 || roller hearth; RHF-03 EXO, RHF-04/05 N2-PSA
+  Heat treatment type || ANNEAL | NORMALIZE | SRA || SRA = stress relief anneal (WI 104B optional)
+  Atmosphere gas || N2-PSA | EXO || protective atmosphere
+  Zone count || I . II . III . IV . V . VI || 6 temperature zones on ANN-FT-01
+  Tolerances || line speed +/-2 m/hr; soaking temp +/-10 C || from WI
+  Batch spacing || 300 mm min between lots; 6000 mm between batches || 
+  Reaction plan || reject / quarantine; no rework || 
+  Record status || DRAFT | SUBMITTED | APPROVED | LOCKED || capture lifecycle
+
+## STP (28 fields)
+Class: {'SYSTEM': 1, 'DERIVED': 4, 'DERIVED/MANUAL': 1, 'AUTO': 8, 'MANUAL': 13, 'MASTER/MANUAL': 1}
+Tables: ['txn.prod_stp_lot', 'plc.sample', 'txn.stp_bath_analysis', 'txn.stp_coating', 'txn.stp_bath_history']
+
+STP-01|Lot header|Lot / run id|lot_no|txn.prod_stp_lot|text|-|SYSTEM|STP + ts|Y||batch on crane
+STP-02|Lot header|Customer|customer_code|txn.prod_stp_lot|text|-|DERIVED|work order|N||
+STP-03|Lot header|Grade|grade_code|txn.prod_stp_lot|text|-|DERIVED|work order|Y||
+STP-04|Lot header|OD x THK x Len|size|txn.prod_stp_lot|json|mm|DERIVED|work order|Y||
+STP-05|Lot header|Work Order No|work_order_no|txn.prod_stp_lot|text|-|DERIVED|work order (BC)|Y||
+STP-06|Lot header|Qty (No / MT)|qty_no / qty_mt|txn.prod_stp_lot|number|pcs,MT|DERIVED/MANUAL|work order / operator|Y||
+STP-07|1 Process monitor|Degreasing temp + time|degrease_temp_c / time_min|txn.prod_stp_lot|number|C,min|AUTO|bath sensor / crane auto|Y||G-390
+STP-08|1 Process monitor|De-scaling / pickling time|pickle_time_min|txn.prod_stp_lot|number|min|AUTO|crane auto|Y||HCl tanks
+STP-09|1 Process monitor|Phosphating temp + time|phos_temp_c / time_min|txn.prod_stp_lot|number|C,min|AUTO|bath sensor / crane|Y||3510E/3510A
+STP-10|1 Process monitor|Neutralizer temp / dip|neut_temp_c|txn.prod_stp_lot|number|C|AUTO|bath / crane|Y||
+STP-11|1 Process monitor|Lubrication temp + time|lube_temp_c / time_min|txn.prod_stp_lot|number|C,min|AUTO|bath / crane|Y||G-3005
+STP-12|1 Process monitor|Dryer temp + time|dryer_temp_c / time_min|txn.prod_stp_lot|number|C,min|AUTO|dryer / crane|Y||Thermopac
+STP-13|1 Process monitor|Reactive oil dip time|reactive_oil_time_min|txn.prod_stp_lot|number|min|AUTO|crane|N||Bondrite (if oil route)
+STP-14|1 Process monitor|Surface finish|surface_finish|txn.prod_stp_lot|text|-|MANUAL|operator|Y||
+STP-15|1 Process monitor|Crane / wagon state|crane_state|plc.sample|text|-|AUTO|ET200S / TP700|N||auto-mode sequence
+STP-16|1 Bath analysis|Degreasing TA|ta_degrease_ml|txn.stp_bath_analysis|number|ml|MANUAL|lab titration|Y||G-390
+STP-17|1 Bath analysis|HCl pickling: HCl con|hcl_con_pct|txn.stp_bath_analysis|number|%|MANUAL|lab|Y||HCl-30% min top-up
+STP-18|1 Bath analysis|HCl pickling: Fe content|fe_pct|txn.stp_bath_analysis|number|%|MANUAL|lab|Y||
+STP-19|1 Bath analysis|Activation pH|activation_ph|txn.stp_bath_analysis|number|pH|MANUAL|lab|Y||GV-6521
+STP-20|1 Bath analysis|Phosphating TA / FA / ACC / OXTA|phos_ta/fa/acc/oxta|txn.stp_bath_analysis|number|ml|MANUAL|lab|Y||3510E/3510A/GB-14
+STP-21|1 Bath analysis|Neutralizer pH|neut_ph|txn.stp_bath_analysis|number|pH|MANUAL|lab|Y||G-21
+STP-22|1 Bath analysis|Lube con / FA / pH|lube_con/fa/ph|txn.stp_bath_analysis|number|%,pH|MANUAL|lab|Y||G-3005
+STP-23|1 Bath analysis|Water rinse pH (1-4)|rinse_ph|txn.stp_bath_analysis|number|pH|MANUAL|lab|Y||
+STP-24|1 Bath analysis|Oil bath water content / acid no|oil_water_pct / acid_no|txn.stp_bath_analysis|number|%,-|MANUAL|lab|N||Bondrite LR 06021
+STP-25|1 Process monitor|Chemical addition (name/qty/batch)|chem_add|txn.prod_stp_lot|json|-|MANUAL|operator|N||
+STP-26|1 Process monitor|Break down & remarks|breakdown_remark|txn.prod_stp_lot|text|-|MANUAL|operator|N||
+STP-27|3 Coating|Phosphated coating weight|coating_gm2|txn.stp_coating|number|g/m2|MANUAL|lab|Y||2 samples, weekly (STP-06)
+STP-28|2 Bath history|Bath change frequency + execution|bath_change|txn.stp_bath_history|json|-|MASTER/MANUAL|schedule / operator|Y||planned vs executed calendar
+
+### Sheet Map
+  1. Production cum process monitoring || GLI-FT-STP-01A (STP-FT-01A) || R3 || Yes || Per lot || txn.prod_stp_lot + txn.stp_bath_analysis || Bath temps + dip times AUTO (crane auto); bath analysis MANUAL (lab); chemical additions MANUAL
+  2. Bath process history card || GLI-FT-PRD-STP-04B (STP-FT-04B) || R2 || Yes || Per bath (calendar) || txn.stp_bath_history || Change frequency MASTER; planned vs executed per day MANUAL
+  3. Phosphate coating weight || GLI-FT-PRD-STP-06 (STP-FT-06) || R0 || Yes || Weekly / sample || txn.stp_coating || Coating weight g/m2 MANUAL (lab); spec 4.0-8.0
+  Work Instruction (A-59) || GLI-WI-PRD59-STP-01 || R09 || Yes || Process logic + bath table || - || auto crane, dip time/temp preset
+  Bath testing WI || GLI-WI-PRD59-STP-02 || - || Yes || Titration methods || - || how bath analysis is done
+  Shift check sheet || GLI-ST-PRD-STP-02 || - || Referenced, not shared || Per shift start || txn.stp_shift_check || gap
+
+### Codes
+  STP route (A-59) || Soap / phosphate draw (105A) || oil draw 105B is A-51 only
+  Bath sequence || Degrease -> HCl pickle -> rinse -> activate -> phosphate -> neutralize -> lube -> dry || + reactive oil on oil route
+  Chemicals || G-390, GV-6521, 3510E/3510A, GB-14, G-21, G-3005, Bondrite LR 06021, Gardoline-R 1683 || supplier: Chemetall/Gardo
+  Coating spec || 4.0-8.0 g/m2 phosphate || weekly, 2 samples
+  Capture || bath temp + dip time AUTO; analysis + coating MANUAL (lab) || 
+  Record status || DRAFT | SUBMITTED | APPROVED | LOCKED || capture lifecycle
+
+## DrawBench (58 fields)
+Class: {'SYSTEM': 1, 'DERIVED': 17, 'MANUAL': 35, 'MASTER': 1, 'AUTO': 4}
+Tables: ['txn.prod_db_lot', 'txn.db_shift_check', 'txn.db_inspection', 'txn.db_tooling_issue', 'master.db_tooling', 'txn.db_tooling_usage', 'txn.prod_db_swage']
+
+DB-01|Lot header|Lot / run id|lot_no|txn.prod_db_lot|text|-|SYSTEM|bench + ts|Y|unique per tenant|
+DB-02|Lot header|W.O. No|work_order_no|txn.prod_db_lot|text|-|DERIVED|work order (BC)|Y|-|from PPC
+DB-03|Lot header|Customer|customer_code|txn.prod_db_lot|text|-|DERIVED|work order|N|FK master.customer|
+DB-04|Lot header|Grade / source|grade_code|txn.prod_db_lot|text|-|DERIVED|work order / tube|Y|FK master.grade|paint colour per Table-B
+DB-05|Lot header|Tube size ordered (OD/ID/THK/Len)|size (jsonb)|txn.prod_db_lot|json|mm|DERIVED|work order / customer drawing|Y|profile round/oval/rect/square|
+DB-06|Lot header|Draw bench No (machine)|bench_code|txn.prod_db_lot|text|-|DERIVED|load plan (Table-C)|Y|FK master.machine|assigned by capacity
+DB-07|Lot header|Draw pass|draw_pass|txn.prod_db_lot|enum|-|MANUAL|operator|Y|1ST|2ND|3RD|multi-pass cycle
+DB-08|Lot header|Incoming tube ref (from mill/STP)|input_tube_ref|txn.prod_db_lot|text|-|DERIVED|route card / journey|Y|-|genealogy
+DB-09|Lot header|Shift / date|shift_ref / prod_date|txn.prod_db_lot|text|-|DERIVED|shift context|Y|FK master.shift|
+MC-01|5 Machine check|Machine cleanliness|clean_ok|txn.db_shift_check|bool|-|MANUAL|operator|Y|-|
+MC-02|5 Machine check|Die & plug selected/condition/fitment|die_plug_ok|txn.db_shift_check|bool|-|MANUAL|operator (issue slip)|Y|verify OD & condition before fix|
+MC-03|5 Machine check|Machine lubrication ok|lube_ok|txn.db_shift_check|bool|-|MANUAL|operator|Y|-|
+MC-04|5 Machine check|Air / hydraulic pressure sufficient|pressure_ok|txn.db_shift_check|bool|-|MANUAL|operator|Y|-|AUTO if bench PLC pressure tag
+MC-05|5 Machine check|Incoming tube lubrication condition|input_lube_ok|txn.db_shift_check|text|-|MANUAL|operator|Y|thin uniform soap/oil from STP|reject to STP if non-uniform
+MC-06|5 Machine check|Draw speed setting (motor rpm)|draw_speed_set|txn.db_shift_check|number|-|MASTER|motor rpm (fixed)|N|by motor capacity|not continuously logged
+MC-07|5 Machine check|Abnormal noise / vibration check|noise_ok|txn.db_shift_check|bool|-|MANUAL|operator|Y|stop + inform SIC if abnormal|
+PR-01|1 Production report|DB No (bench)|bench_code|txn.prod_db_lot|text|-|DERIVED|load plan|Y|FK master.machine|GLI-FT-PRD-DRW-01
+PR-02|1 Production report|Operator name|operator_ref|txn.prod_db_lot|text|-|MANUAL|operator|Y|-|
+PR-03|1 Production report|Work order / grade / customer|work_order_no / grade / customer|txn.prod_db_lot|text|-|DERIVED|work order|Y|-|
+PR-04|1 Production report|Final size (OD/ID/TH/LEN)|final_size|txn.prod_db_lot|json|mm|DERIVED|work order|Y|-|
+PR-05|1 Production report|FROM size (incoming OD/TH/LEN)|from_size|txn.prod_db_lot|json|mm|MANUAL|operator measure|Y|1st-off incoming|record
+PR-06|1 Production report|TO size (drawn OD/ID/TH/LEN)|to_size|txn.prod_db_lot|json|mm|MANUAL|operator measure|Y|per WO tolerance|1st-off drawn
+PR-07|1 Production report|Draw plan length|draw_plan_len_mm|txn.prod_db_lot|number|mm|DERIVED|work order|N|>0|
+PR-08|1 Production report|Inter / Final stage|stage|txn.prod_db_lot|enum|-|MANUAL|operator|Y|INTER|FINAL|draw pass
+PR-09|1 Production report|Accepted qty (Nos / MT)|accepted_nos / accepted_mt|txn.prod_db_lot|number|pcs,MT|MANUAL|operator count|Y|>=0|AUTO count if bench PLC
+PR-10|1 Production report|Rejected qty (Nos)|rejected_nos|txn.prod_db_lot|int|pcs|MANUAL|operator|N|>=0|set-up tubes to reject bin
+PR-11|1 Production report|Drawn meter|drawn_meter|txn.prod_db_lot|number|m|AUTO|bench PLC if wired|N|-|throughput
+PR-12|1 Production report|Draw / pulling load|pull_load|txn.prod_db_lot|number|ton|AUTO|bench PLC if wired|N|-|DB-05/06/07 easiest
+PR-13|1 Production report|Cycle time|cycle_time_s|txn.prod_db_lot|number|s|AUTO|bench PLC if wired|N|-|throughput / OEE
+PR-14|1 Production report|Break down / remarks|breakdown_remark|txn.prod_db_lot|text|-|MANUAL|operator|N|-|embedded downtime note
+PR-15|1 Production report|Ovality / circularity / concentricity|form_dev|txn.db_inspection|number|mm|MANUAL|operator / QA|N|critical -> cross-verify QA|WI 1st-off
+PR-16|1 Production report|Surface finish (visual) / Ra|surface / ra_value|txn.db_inspection|text|-|MANUAL|operator / lab|N|Ra: 100 mm sample to lab|
+PR-17|1 Production report|Re-first-off trigger|refirstoff_flag|txn.db_inspection|bool|-|MANUAL|operator|N|>2 hr same material; shift/lot/operator change|Table-A
+PR-18|1 Production report|Last-off result|last_off_result|txn.db_inspection|enum|-|MANUAL|operator|Y|fail -> HOLD, NC|keep 1st/last-off samples
+PR-19|1 Production report|Tag (size/customer/grade) forward|tag_no|txn.prod_db_lot|text|-|MANUAL|operator|Y|per GLI-WI-QA-13|release to next process
+IS-01|2 Issue slip|Tube size to draw (OD/ID/THK)|issue_size|txn.db_tooling_issue|json|mm|DERIVED|work order|Y|-|GLI-FT-PRD-DRW-08
+IS-02|2 Issue slip|Die code|die_code|txn.db_tooling_issue|text|-|MANUAL|tool room|Y|FK master.db_tooling|
+IS-03|2 Issue slip|Stage for use (final/inter)|stage|txn.db_tooling_issue|enum|-|MANUAL|operator|Y|FINAL|INTER|
+IS-04|2 Issue slip|Die size (per history card)|die_size_mm|txn.db_tooling_issue|number|mm|DERIVED|history card|Y|-|
+IS-05|2 Issue slip|Tube OD actual at 1st off|actual_od_1stoff|txn.db_tooling_issue|number|mm|MANUAL|operator|Y|-|
+IS-06|2 Issue slip|Die condition|die_condition|txn.db_tooling_issue|text|-|MANUAL|operator|Y|no score/scratch/crack|
+IS-07|2 Issue slip|Plug stage / size / condition|plug_stage_size_cond|txn.db_tooling_issue|mixed|mm|MANUAL|operator|Y|actual at issue|
+DP-01|3 Die history|Die code / history card no|die_code|master.db_tooling|text|-|MANUAL|tool room|Y|-|GLI-FT-PRD-DRW-03
+DP-02|3 Die history|Received date / supplier / OD req|received / supplier / od_req|master.db_tooling|mixed|mm|MANUAL|tool room|Y|receiving inspection|
+DP-03|3 Die history|Date (each use)|use_date|txn.db_tooling_usage|date|-|MANUAL|operator|Y|-|
+DP-04|3 Die history|OD observation at previous drawn tube size|prev_draw_od|txn.db_tooling_usage|number|mm|MANUAL|operator measure|Y|within tube OD + tol|bearing size
+DP-05|3 Die history|No. of tubes produced|tubes_produced|txn.db_tooling_usage|int|pcs|AUTO|counter if wired else MANUAL|Y|-|tooling life
+DP-06|3 Die history|Input tube size|input_size_mm|txn.db_tooling_usage|number|mm|DERIVED|lot / route|N|-|
+DP-07|3 Die history|Die polishing|die_polish|txn.db_tooling_usage|text|-|MANUAL|operator|N|220 grit + D3 diamond|
+DP-08|3 Die history|Die oversized / disposition|oversized / disposition|txn.db_tooling_usage|text|-|MANUAL|operator|N|reject to supplier if oversized|
+SW-01|4 Swaging|M/C No (HYD / PUSH / rotary)|swg_machine|txn.prod_db_swage|text|-|MANUAL|operator|Y|HYD-1/2, PUSH-1/2|GLI-FT-PRD-SWG-01/02
+SW-02|4 Swaging|Work order / customer / grade|work_order_no / customer / grade|txn.prod_db_swage|text|-|DERIVED|work order|Y|-|
+SW-03|4 Swaging|Size (OD/ID/THK/LEN)|size|txn.prod_db_swage|json|mm|DERIVED|work order|Y|-|
+SW-04|4 Swaging|Swaging die used|swg_die|txn.prod_db_swage|text|-|MANUAL|operator|Y|push-pointer/hydraulic(2pc)/rotary(4pc)|crack -> reject full set
+SW-05|4 Swaging|Draw size (next)|draw_size|txn.prod_db_swage|json|mm|DERIVED|draw plan|Y|-|size to be drawn next
+SW-06|4 Swaging|Total tag length & length after die|tag_len / len_after_die|txn.prod_db_swage|number|mm|MANUAL|operator (scale)|Y|min swage-end by tonnage|10/20T=80+/-10; 40/80T=100+/-10; 120T=120+/-10; LDP 190-225
+SW-07|4 Swaging|Quantity|pieces|txn.prod_db_swage|int|pcs|MANUAL|operator|Y|>=0|
+SW-08|4 Swaging|Tag re-applied to swaged lot|tag_no|txn.prod_db_swage|text|-|MANUAL|operator|Y|-|carry lot identity
+
+### Sheet Map
+  1. Production + inspection report || GLI-FT-PRD-DRW-01 Draw Bench Production Report (DB-FT-01) || R6 || Yes (now in hand) || Per lot / bench || txn.prod_db_lot || FROM/TO OD-ID-TH-LEN, inter/final, accepted/rejected/drawn meter, breakdown; dims MANUAL, count/load AUTO if bench PLC
+  2. Die & plug issue slip || GLI-FT-PRD-DRW-08 (DB-FT-08) || R3 || Yes (now in hand) || Per die/plug issue || txn.db_tooling_issue || Die/plug code, stage, size per history, actual OD at 1st off, condition; MANUAL
+  3. Die history card || GLI-FT-PRD-DRW-03 (DB-FT-03) || R4 || Yes (now in hand) || Per die instance || master.db_tooling + txn.db_tooling_usage || OD at previous drawn size, tubes produced, input size, polishing, oversized; MANUAL
+  4. Swaging production report || GLI-FT-PRD-SWG-01 (SWG-FT-01) / SWG-FT-02 || R1 / R0 || Yes (now in hand) || Per lot || txn.prod_db_swage || Swaging die used, draw size, tag length & length after die, quantity; MANUAL
+  5. Machine check sheet (start of shift) || GLI-FT-PRD-DRAW-07 || - || Still referenced, not shared || Per shift start || txn.db_shift_check || Operator checks MANUAL; only remaining format gap
+  Drawing Work Instruction || GLI-WI-PRD-DRW-01 || R13 || Yes || Process logic + tooling mgmt || - || Tables A/B/C embedded
+  Swaging Work Instruction || GLI-WI-PRD-SWG-01 || R04 || Yes || Swage-end + pointing sets || - || Capacity charts A51/A59/LDP
+  Identification & Traceability || GLI-WI-QA-13 || R11 || Yes || Tag + coil/lot id || - || tag colour by grade/stage

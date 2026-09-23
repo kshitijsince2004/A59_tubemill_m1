@@ -1,0 +1,20 @@
+{
+  "report": "STP-FT-04",
+  "version": 1,
+  "sheet": "STP-FT-04",
+  "titleBlock": { "date": "F2", "shift": "F3" },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "sl_no": "A",
+      "bath_name": "B",
+      "change_freq": "C",
+      "last_change": "D",
+      "next_due": "E",
+      "remarks": "F"
+    }
+  },
+  "footer": { "supervisor": "B30" }
+}

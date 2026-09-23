@@ -1,0 +1,233 @@
+[
+  {
+    "bcId": "PO-2026-1042",
+    "workOrderNo": "WO-2026-1042",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "bcBatchNumber": "BC-88421",
+    "lotNo": "COIL-1042-A",
+    "sizeKey": "OD25.4",
+    "size": { "profile": "ROUND", "odMm": 25.4, "equivOdMm": 25.4, "thkMm": 2.6, "lengthMm": 6000 },
+    "qtyPieces": 1200,
+    "plannedQty": 12.5,
+    "queueCardId": "qc-001"
+  },
+  {
+    "bcId": "PO-2026-1043",
+    "workOrderNo": "WO-2026-1043",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "JINDAL",
+    "gradeCode": "1010",
+    "bcBatchNumber": "BC-88422",
+    "lotNo": "COIL-1043-A",
+    "sizeKey": "OD25.4",
+    "size": { "profile": "ROUND", "odMm": 25.4, "equivOdMm": 25.4, "thkMm": 3, "lengthMm": 6000 },
+    "qtyPieces": 1500,
+    "plannedQty": 15.2,
+    "queueCardId": "qc-002"
+  },
+  {
+    "bcId": "PO-2026-1044",
+    "workOrderNo": "WO-2026-1044",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "bcBatchNumber": "BC-88423",
+    "lotNo": "COIL-1044-A",
+    "sizeKey": "SEC40X25(41.28)",
+    "size": { "profile": "SECTION", "aMm": 40, "bMm": 25, "equivOdMm": 41.28, "thkMm": 1.5, "lengthMm": 6000 },
+    "qtyPieces": 1800,
+    "plannedQty": 9.8,
+    "queueCardId": "qc-003"
+  },
+  {
+    "bcId": "PO-2026-2001",
+    "workOrderNo": "WO-2026-2001",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "bcBatchNumber": "BC-90001",
+    "lotNo": "LOT-FUR-2001",
+    "sizeKey": "OD31.8",
+    "size": { "profile": "ROUND", "odMm": 31.8, "equivOdMm": 31.8, "thkMm": 2.0, "lengthMm": 6000 },
+    "qtyPieces": 800,
+    "plannedQty": 8.0,
+    "queueCardId": "qc-erp-2001"
+  },
+  {
+    "bcId": "PO-2026-2002",
+    "workOrderNo": "WO-2026-2002",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "JINDAL",
+    "gradeCode": "1020",
+    "bcBatchNumber": "BC-90002",
+    "lotNo": "LOT-STP-2002",
+    "sizeKey": "OD38.1",
+    "size": { "profile": "ROUND", "odMm": 38.1, "equivOdMm": 38.1, "thkMm": 2.5, "lengthMm": 6000 },
+    "qtyPieces": 600,
+    "plannedQty": 7.5,
+    "queueCardId": "qc-erp-2002"
+  },
+  {
+    "bcId": "PO-2026-2003",
+    "workOrderNo": "WO-2026-2003",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "AMNS",
+    "gradeCode": "1010",
+    "bcBatchNumber": "BC-90003",
+    "lotNo": "LOT-DRW-2003",
+    "sizeKey": "OD25.4",
+    "size": { "profile": "ROUND", "odMm": 25.4, "equivOdMm": 25.4, "thkMm": 1.8, "lengthMm": 6000 },
+    "qtyPieces": 900,
+    "plannedQty": 6.2,
+    "queueCardId": "qc-erp-2003"
+  },
+  {
+    "bcId": "PO-2026-1999",
+    "workOrderNo": "WO-2026-1999",
+    "status": "Finished",
+    "millCode": "A-59",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "bcBatchNumber": "BC-89999",
+    "lotNo": "LOT-DONE-1999",
+    "sizeKey": "OD25.4",
+    "size": { "profile": "ROUND", "odMm": 25.4, "equivOdMm": 25.4, "thkMm": 2.6, "lengthMm": 6000 },
+    "qtyPieces": 100,
+    "plannedQty": 1.0,
+    "queueCardId": "qc-erp-1999"
+  },
+  {
+    "bcId": "PO-26081750",
+    "workOrderNo": "26081750",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "MARMON",
+    "gradeCode": "1020",
+    "bcBatchNumber": "BC-26081750",
+    "lotNo": "01-2608B-0290",
+    "sizeKey": "OD50.8",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 50.8,
+      "equivOdMm": 50.8,
+      "thkMm": 3.6,
+      "lengthMm": 4900,
+      "slitWidthMm": 155
+    },
+    "qtyPieces": 105,
+    "plannedQty": 2.134,
+    "queueCardId": "qc-stp-26081750",
+    "processHint": "STP",
+    "lines": [
+      {
+        "lineNo": 1,
+        "lotNo": "01-2608B-0290",
+        "coilNo": "01-2608B-0290",
+        "tdc": "TDC-23899",
+        "passNo": 1,
+        "size": {
+          "profile": "ROUND",
+          "odMm": 50.8,
+          "thkMm": 3.6,
+          "lengthMm": 4900,
+          "slitWidthMm": 155
+        },
+        "qtyPieces": 105,
+        "plannedQty": 2.134,
+        "finalSize": { "odMm": 44.45, "idMm": 38.354, "thkMm": 3.048, "lengthMm": 6096 },
+        "tubeShape": "ROUND",
+        "nextProcess": "HANL, STPS, SWAG"
+      },
+      {
+        "lineNo": 2,
+        "lotNo": "01-2608B-0291",
+        "coilNo": "01-2608B-0291",
+        "tdc": "TDC-23900",
+        "passNo": 1,
+        "size": {
+          "profile": "ROUND",
+          "odMm": 38.1,
+          "thkMm": 2.5,
+          "lengthMm": 6000,
+          "slitWidthMm": 120
+        },
+        "qtyPieces": 80,
+        "plannedQty": 1.5,
+        "finalSize": { "odMm": 31.8, "idMm": 26.8, "thkMm": 2.5, "lengthMm": 6000 },
+        "tubeShape": "ROUND",
+        "nextProcess": "HANL, STPS"
+      }
+    ]
+  },
+  {
+    "bcId": "PO-STP-8801",
+    "workOrderNo": "WO-STP-8801",
+    "status": "Released",
+    "millCode": "A-59",
+    "customerCode": "TATA",
+    "gradeCode": "1010",
+    "bcBatchNumber": "BC-STP-8801",
+    "lotNo": "COIL-STP-8801",
+    "sizeKey": "OD31.8",
+    "size": {
+      "profile": "ROUND",
+      "odMm": 31.8,
+      "equivOdMm": 31.8,
+      "thkMm": 2.0,
+      "lengthMm": 6000,
+      "slitWidthMm": 100
+    },
+    "qtyPieces": 200,
+    "plannedQty": 3.5,
+    "queueCardId": "qc-stp-8801",
+    "processHint": "STP",
+    "lines": [
+      {
+        "lineNo": 1,
+        "lotNo": "COIL-STP-8801-A",
+        "coilNo": "COIL-STP-8801-A",
+        "tdc": "TDC-STP-01",
+        "passNo": 1,
+        "size": {
+          "profile": "ROUND",
+          "odMm": 31.8,
+          "thkMm": 2.0,
+          "lengthMm": 6000,
+          "slitWidthMm": 100
+        },
+        "qtyPieces": 120,
+        "plannedQty": 2.1,
+        "finalSize": { "odMm": 28.0, "thkMm": 1.8, "lengthMm": 6000 },
+        "tubeShape": "ROUND",
+        "nextProcess": "DRW"
+      },
+      {
+        "lineNo": 2,
+        "lotNo": "COIL-STP-8801-B",
+        "coilNo": "COIL-STP-8801-B",
+        "tdc": "TDC-STP-02",
+        "passNo": 1,
+        "size": {
+          "profile": "ROUND",
+          "odMm": 25.4,
+          "thkMm": 1.6,
+          "lengthMm": 5800,
+          "slitWidthMm": 85
+        },
+        "qtyPieces": 80,
+        "plannedQty": 1.4,
+        "finalSize": { "odMm": 22.0, "thkMm": 1.5, "lengthMm": 5800 },
+        "tubeShape": "ROUND",
+        "nextProcess": "DRW, SWG"
+      }
+    ]
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "report": "TM-FT-02",
+  "version": 1,
+  "sheet": "TM-FT-02",
+  "titleBlock": { "date": "F2", "shift": "F3", "mill": "B2" },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "work_order_no": "A",
+      "grade_code": "B",
+      "size_key": "C",
+      "prime_nos": "D",
+      "prime_mt": "E",
+      "pq2_mt": "F",
+      "cq_mt": "G",
+      "open_mt": "H",
+      "scrap_mt": "I",
+      "raw_material_mt": "J",
+      "yield_pct": "K"
+    }
+  },
+  "footer": { "supervisor": "B40" },
+  "numberFormats": { "prime_mt": "0.000", "yield_pct": "0.00" }
+}

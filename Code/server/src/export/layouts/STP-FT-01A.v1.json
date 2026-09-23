@@ -1,0 +1,53 @@
+{
+  "report": "STP-FT-01A",
+  "version": 1,
+  "sheet": "STP-FT-01A",
+  "titleBlock": { "date": "F2", "shift": "F3" },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "sl_no": "A",
+      "customer_name": "B",
+      "grade_code": "C",
+      "size": "D",
+      "work_order_no": "E",
+      "qty_no": "F",
+      "qty_mt": "G",
+      "degrease_temp_c": "H",
+      "degrease_time_min": "I",
+      "descale_time_min": "J",
+      "phos_temp_c": "K",
+      "phos_time_min": "L",
+      "neut_temp_c": "M",
+      "neut_dip": "N",
+      "lube_temp_c": "O",
+      "lube_time_min": "P",
+      "dryer_temp_c": "Q",
+      "dryer_time_min": "R",
+      "sf_neut_temp_c": "S",
+      "roil_time_min": "T"
+    }
+  },
+  "analysisTable": {
+    "dataStartRow": 5,
+    "columns": {
+      "bath_name": "V",
+      "parameter": "W",
+      "spec_value": "X",
+      "obz_value": "Y",
+      "chem_name": "Z"
+    }
+  },
+  "footer": { "supervisor": "B35", "incharge": "D35" },
+  "numberFormats": {
+    "qty_mt": "0.000",
+    "degrease_temp_c": "0.0",
+    "phos_temp_c": "0.0",
+    "neut_temp_c": "0.0",
+    "lube_temp_c": "0.0",
+    "dryer_temp_c": "0.0",
+    "sf_neut_temp_c": "0.0"
+  }
+}

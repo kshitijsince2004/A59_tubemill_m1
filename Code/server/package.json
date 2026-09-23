@@ -3,11 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "dev": "npx concurrently -k -n babel,server -c yellow,blue \"babel src --out-dir dist --extensions .js --config-file ../babel.build.cjs --copy-files -w\" \"node --watch dist/index.js\"",
+    "build": "babel src --out-dir dist --extensions .js --config-file ../babel.build.cjs --copy-files",
     "start": "node dist/index.js",
-    "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts"
+    "migrate": "npm run build && node dist/db/migrate.js",
+    "seed": "npm run build && node dist/db/seed.js",
+    "verify:rls": "npm run build && node dist/verify-rls.js",
+    "verify:rbac": "npm run build && node dist/verify-rbac.js",
+    "smoke:machine-head": "npm run build && node dist/smoke-machine-head.js",
+    "smoke:plant-head": "npm run build && node dist/smoke-plant-head.js",
+    "smoke:api-inventory": "npm run build && node dist/smoke-api-inventory.js",
+    "verify:phases": "npm run build && node dist/verify-phases.js",
+    "verify:state-machine": "npm run build && node dist/verify-state-machine.js"
   },
   "dependencies": {
     "@a59/shared": "*",
@@ -15,16 +22,10 @@
     "@netlify/functions": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "pg": "^8.13.1",
-    "serverless-http": "^4.0.0"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.10.5",
-    "@types/pg": "^8.11.10",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "serverless-http": "^4.0.0",
+    "supertokens-node": "^21.1.0"
   }
 }

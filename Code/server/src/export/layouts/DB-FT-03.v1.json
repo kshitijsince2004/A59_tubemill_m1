@@ -1,0 +1,33 @@
+{
+  "report": "DB-FT-03",
+  "version": 1,
+  "sheet": "DB-FT-03",
+  "titleBlock": {
+    "die_code": "B2",
+    "supplier": "B3",
+    "od_required": "B4",
+    "history_card_no": "D2",
+    "status": "D3"
+  },
+  "table": {
+    "headerRows": [6],
+    "dataStartRow": 7,
+    "rowBlock": 1,
+    "columns": {
+      "use_date": "A",
+      "od_at_prev_drawn": "B",
+      "tubes_produced": "C",
+      "input_tube_size": "D",
+      "die_polishing": "E",
+      "die_oversized": "F",
+      "disposition": "G",
+      "remarks": "H"
+    }
+  },
+  "footer": {
+    "sign": "B40"
+  },
+  "numberFormats": {
+    "od_at_prev_drawn": "0.00"
+  }
+}

@@ -3,14 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "babel src --out-dir dist --extensions .js --config-file ../babel.build.cjs",
+    "test:validation": "npm run build && node dist/validation/selftest.js"
   },
   "dependencies": {
     "zod": "^3.24.1"
-  },
-  "devDependencies": {
-    "typescript": "^5.7.3"
   }
 }

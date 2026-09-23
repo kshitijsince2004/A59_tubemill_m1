@@ -1,0 +1,16 @@
+{
+  "stoppage": [
+    { "zedralCode": "TM-01", "bcCode": "STOP-ROLL", "label": "Roll change", "category": "PLANNED", "isPlanned": true },
+    { "zedralCode": "TM-02", "bcCode": "STOP-WELD", "label": "Welder fault", "category": "ELECT", "isPlanned": false },
+    { "zedralCode": "TM-03", "bcCode": "STOP-MECH", "label": "Mechanical breakdown", "category": "MECH", "isPlanned": false },
+    { "zedralCode": "FUR-01", "bcCode": "STOP-BURN", "label": "Furnace burner fault", "category": "ELECT", "isPlanned": false },
+    { "zedralCode": "STP-01", "bcCode": "STOP-CRANE", "label": "Crane stop", "category": "MECH", "isPlanned": false },
+    { "zedralCode": "DRW-01", "bcCode": "STOP-DRAW", "label": "Draw bench stop", "category": "MECH", "isPlanned": false }
+  ],
+  "scrap": [
+    { "zedralCode": "SCR-EDGE", "bcCode": "SCRAP-EDGE", "label": "Edge crack" },
+    { "zedralCode": "SCR-WELD", "bcCode": "SCRAP-WELD", "label": "Weld defect" },
+    { "zedralCode": "SCR-DIM", "bcCode": "SCRAP-DIM", "label": "Dimension out of tolerance" },
+    { "zedralCode": "SCR-SURF", "bcCode": "SCRAP-SURF", "label": "Surface defect" }
+  ]
+}

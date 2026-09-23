@@ -1,11 +1,11 @@
 # A59 Tube Mill M1
 
-Zedral Module M1 (Data Capture) build for the Goodluck India A-59 ERW tube mill, Sikandrabad Unit 2.
+Zedral Module M1 (Data Capture) for Goodluck India A-59 — **Tube Mill → Furnace → STP → Draw Bench**.
 
 ## Folder layout
 
-- **Dev Specs/** — Developer specifications and implementation plans.
-- **Code/** — Standalone A-59 M1 application (API, UI, migrations, Docker).
+- **Dev Specs/** — Developer specifications, field dictionaries, and implementation plans.
+- **Code/** — Standalone A-59 M1 application (API, UI, migrations, Docker). Four-process Phase 1 manual digitization.
 
 ## Netlify demo deploy
 

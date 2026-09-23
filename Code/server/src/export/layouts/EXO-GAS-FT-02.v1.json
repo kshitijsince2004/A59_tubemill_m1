@@ -1,0 +1,26 @@
+{
+  "report": "EXO-GAS-FT-02",
+  "version": 1,
+  "sheet": "EXO-GAS-FT-02",
+  "titleBlock": { "date": "F2", "shift": "F3" },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "sl_no": "A",
+      "charge_no": "B",
+      "furnace_code": "C",
+      "logged_at": "D",
+      "dew_point_c": "E",
+      "h2_pct": "F",
+      "o2_ppm": "G",
+      "flow": "H",
+      "pressure": "I",
+      "png_consumption": "J",
+      "nh3_consumption": "K",
+      "remarks": "L"
+    }
+  },
+  "footer": { "supervisor": "B30" }
+}

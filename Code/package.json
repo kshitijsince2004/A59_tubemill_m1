@@ -13,13 +13,19 @@
     "migrate": "npm run migrate -w server",
     "seed": "npm run seed -w server",
     "setup": "npm install && npm run migrate && npm run seed",
-    "reset-db": "docker compose down -v && docker compose up -d && npm run migrate && npm run seed"
+    "smoke:machine-head": "npm run smoke:machine-head -w server",
+    "reset-db": "docker compose down -v && docker compose up -d db supertokens && npm run migrate && npm run seed",
+    "detype": "node scripts/detype.mjs"
   },
   "dependencies": {
     "@netlify/database": "^2.0.1"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "typescript": "^5.7.3"
+    "@babel/cli": "^7.26.0",
+    "@babel/core": "^7.26.0",
+    "@babel/plugin-transform-modules-commonjs": "^7.26.0",
+    "@babel/plugin-transform-typescript": "^7.26.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "concurrently": "^9.1.2"
   }
 }

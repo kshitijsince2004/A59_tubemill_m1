@@ -1,0 +1,105 @@
+{
+  "machines": [
+    {
+      "bcId": "WC-A59",
+      "machineCode": "A-59",
+      "label": "A-59 ERW Tube Mill",
+      "processCode": "TM",
+      "sawType": "FLYING"
+    },
+    {
+      "bcId": "WC-RHF03",
+      "machineCode": "RHF-03",
+      "label": "RHF-03 Annealing",
+      "processCode": "FUR"
+    },
+    {
+      "bcId": "WC-RHF04",
+      "machineCode": "RHF-04",
+      "label": "RHF-04 Annealing",
+      "processCode": "FUR"
+    },
+    {
+      "bcId": "WC-RHF05",
+      "machineCode": "RHF-05",
+      "label": "RHF-05 Annealing",
+      "processCode": "FUR"
+    },
+    {
+      "bcId": "WC-STP",
+      "machineCode": "STP-LINE",
+      "label": "STP Line 105A",
+      "processCode": "STP"
+    },
+    {
+      "bcId": "WC-STP01",
+      "machineCode": "STP-01",
+      "label": "STP-01",
+      "processCode": "STP"
+    },
+    {
+      "bcId": "WC-DB10",
+      "machineCode": "DB-10T",
+      "label": "Draw Bench 10T",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-DB20",
+      "machineCode": "DB-20T",
+      "label": "Draw Bench 20T",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-DB40",
+      "machineCode": "DB-40T",
+      "label": "Draw Bench 40T",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-DB45",
+      "machineCode": "DB-45T",
+      "label": "Draw Bench 45T (3 tube)",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-DB80",
+      "machineCode": "DB-80T",
+      "label": "Draw Bench 80T",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-DB120",
+      "machineCode": "DB-120T",
+      "label": "Draw Bench 120T",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-DB180",
+      "machineCode": "DB-180T",
+      "label": "Draw Bench 180T (LDP)",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-DB250",
+      "machineCode": "DB-250T",
+      "label": "Draw Bench 250T (LDP)",
+      "processCode": "DRW"
+    },
+    {
+      "bcId": "WC-SWG01",
+      "machineCode": "SWG-01",
+      "label": "Swage Machine 01",
+      "processCode": "SWG"
+    }
+  ],
+  "customers": [
+    { "bcId": "CUST-TATA", "code": "TATA", "name": "Tata Steel" },
+    { "bcId": "CUST-JINDAL", "code": "JINDAL", "name": "Jindal Steel" },
+    { "bcId": "CUST-AMNS", "code": "AMNS", "name": "AMNS" },
+    { "bcId": "CUST-MARMON", "code": "MARMON", "name": "Marmon" }
+  ],
+  "grades": [
+    { "bcId": "ITEM-1010", "code": "1010", "label": "SAE 1010", "densityKgM3": 7850 },
+    { "bcId": "ITEM-1020", "code": "1020", "label": "SAE 1020", "densityKgM3": 7850 }
+  ]
+}

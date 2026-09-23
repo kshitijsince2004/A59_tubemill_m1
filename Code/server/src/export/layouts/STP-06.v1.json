@@ -1,0 +1,22 @@
+{
+  "report": "STP-06",
+  "version": 1,
+  "sheet": "STP-06",
+  "titleBlock": { "date": "F2", "shift": "F3" },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "sl_no": "A",
+      "lot_no": "B",
+      "work_order_no": "C",
+      "sample_date": "D",
+      "coating_gsm": "E",
+      "sample_no": "F",
+      "remarks": "G"
+    }
+  },
+  "footer": { "supervisor": "B30" },
+  "numberFormats": { "coating_gsm": "0.00" }
+}

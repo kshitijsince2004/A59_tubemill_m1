@@ -1,0 +1,39 @@
+{
+  "report": "DB-FT-01",
+  "version": 1,
+  "sheet": "DB-FT-01",
+  "titleBlock": { "date": "F2", "shift": "F3" },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "bench_code": "A",
+      "operator_ref": "B",
+      "work_order_no": "C",
+      "grade_code": "D",
+      "customer_name": "E",
+      "final_od_mm": "F",
+      "final_id_mm": "G",
+      "final_th_mm": "H",
+      "final_len_mm": "I",
+      "from_od_mm": "J",
+      "from_th_mm": "K",
+      "from_len_mm": "L",
+      "to_od_mm": "M",
+      "to_id_mm": "N",
+      "to_th_mm": "O",
+      "to_len_mm": "P",
+      "draw_plan_len_mm": "Q",
+      "pass_type": "R",
+      "accepted_nos": "S",
+      "accepted_mt": "T",
+      "rejected_nos": "U",
+      "drawn_meter": "V",
+      "remarks": "W"
+    },
+    "repeatingGroups": { "by": "bench_code", "blockLabelCell": "A", "breakdownRow": true }
+  },
+  "footer": { "supervisor": "B41", "incharge": "S41" },
+  "numberFormats": { "final_od_mm": "0.00", "accepted_mt": "0.000" }
+}

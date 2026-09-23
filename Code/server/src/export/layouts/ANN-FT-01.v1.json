@@ -1,0 +1,47 @@
+{
+  "report": "ANN-FT-01",
+  "version": 1,
+  "sheet": "ANN-FT-01",
+  "titleBlock": { "date": "F2", "shift": "F3" },
+  "table": {
+    "headerRows": [4],
+    "dataStartRow": 5,
+    "rowBlock": 1,
+    "columns": {
+      "sl_no": "A",
+      "customer_name": "B",
+      "size": "C",
+      "work_order_no": "D",
+      "grade_code": "E",
+      "qty_nos": "F",
+      "qty_mt": "G",
+      "heat_treatment": "H",
+      "zone1_min": "I",
+      "zone1_max": "J",
+      "zone2_min": "K",
+      "zone2_max": "L",
+      "zone3_min": "M",
+      "zone3_max": "N",
+      "zone4_min": "O",
+      "zone4_max": "P",
+      "zone5_min": "Q",
+      "zone5_max": "R",
+      "zone6_min": "S",
+      "zone6_max": "T",
+      "line_speed_m_hr": "U",
+      "total_mt": "V",
+      "remarks": "W"
+    }
+  },
+  "footer": {
+    "supervisor": "B30",
+    "incharge": "D30",
+    "png_a": "B32",
+    "png_b": "C32",
+    "png_c": "D32",
+    "nh3_a": "B33",
+    "nh3_b": "C33",
+    "nh3_c": "D33"
+  },
+  "numberFormats": { "qty_mt": "0.000", "line_speed_m_hr": "0.0" }
+}

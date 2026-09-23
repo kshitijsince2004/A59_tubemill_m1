@@ -1,0 +1,26 @@
+{
+  "id": "stp_01a",
+  "version": "1",
+  "sheetName": "STP-01A",
+  "filenamePattern": "STP-01A_{lotNo}_{prodDate}",
+  "columns": [
+    "lotNo",
+    "customerCode",
+    "gradeCode",
+    "workOrderNo",
+    "qtyNo",
+    "qtyMt",
+    "degreaseTempC",
+    "degreaseTimeMin",
+    "pickleTimeMin",
+    "phosphateTempC",
+    "phosphateTimeMin",
+    "neutralizerTimeMin",
+    "lubeTempC",
+    "lubeTimeMin",
+    "dryerTimeMin",
+    "surfaceFinish",
+    "chemAddition",
+    "remarks"
+  ]
+}

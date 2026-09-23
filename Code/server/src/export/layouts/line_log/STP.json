@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "process": "STP",
+  "reportCode": "LINE-LOG-STP",
+  "title": "A-59 STP Line Log",
+  "sheets": [
+    {
+      "name": "LineLog",
+      "columns": [
+        { "key": "lotNo", "header": "Lot No" },
+        { "key": "workOrderNo", "header": "WO" },
+        { "key": "machineCode", "header": "Machine" },
+        { "key": "gradeCode", "header": "Grade" },
+        { "key": "qtyNo", "header": "Nos" },
+        { "key": "qtyMt", "header": "MT" },
+        { "key": "status", "header": "Status" }
+      ]
+    }
+  ]
+}
