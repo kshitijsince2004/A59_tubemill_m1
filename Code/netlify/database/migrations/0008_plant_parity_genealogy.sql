@@ -131,4 +131,10 @@ BEGIN
   END LOOP;
 END $$;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA txn, master TO m1_app;
+-- Optional local Docker role; Netlify managed Postgres has no m1_app.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'm1_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA txn, master TO m1_app;
+  END IF;
+END $$;

@@ -73,7 +73,13 @@ BEGIN
   END LOOP;
 END $$;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON master.db_paint_colour, master.db_swage_end_spec TO m1_app;
+-- Optional local Docker role; Netlify managed Postgres has no m1_app.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'm1_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON master.db_paint_colour, master.db_swage_end_spec TO m1_app;
+  END IF;
+END $$;
 
 -- Seed Table-C / B reference rows for default tenant when empty (idempotent upserts)
 DO $$

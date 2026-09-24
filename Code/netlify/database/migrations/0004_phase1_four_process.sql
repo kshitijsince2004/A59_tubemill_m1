@@ -452,8 +452,14 @@ BEGIN
   END LOOP;
 END $$;
 
-GRANT USAGE ON SCHEMA master, txn, plc, ops TO m1_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA master, txn, plc, ops TO m1_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA master, txn, plc, ops
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO m1_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA master, txn, plc, ops TO m1_app;
+-- Optional local Docker role; Netlify managed Postgres has no m1_app.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'm1_app') THEN
+    GRANT USAGE ON SCHEMA master, txn, plc, ops TO m1_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA master, txn, plc, ops TO m1_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA master, txn, plc, ops
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO m1_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA master, txn, plc, ops TO m1_app;
+  END IF;
+END $$;
