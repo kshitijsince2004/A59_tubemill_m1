@@ -19,6 +19,7 @@
     "verify:phases": "npm run build && node dist/verify-phases.js",
     "verify:state-machine": "npm run build && node dist/verify-state-machine.js",
     "check:migration-parity": "node scripts/check-migration-parity.mjs",
+    "check:sql-encoding": "node scripts/check-sql-encoding.mjs",
     "smoke:unauth": "node scripts/smoke-unauth-401.mjs",
     "cleanup:retention": "node scripts/cleanup-retention.mjs"
   },

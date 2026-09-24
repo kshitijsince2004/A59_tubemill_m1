@@ -3,7 +3,7 @@
 # (platform auto-migrator was hanging after "Database snapshot created").
 [build]
   base = "Code"
-  command = "node -e \"console.log('[build] NETLIFY_DB_URL', process.env.NETLIFY_DB_URL ? 'SET' : 'MISSING'); console.log('[build] CONTEXT', process.env.CONTEXT || 'none')\" && npm install && node netlify/database/apply-sql.mjs && npm run build -w shared && npm run build -w client"
+  command = "node -e \"console.log('[build] NETLIFY_DB_URL', process.env.NETLIFY_DB_URL ? 'SET' : 'MISSING'); console.log('[build] CONTEXT', process.env.CONTEXT || 'none')\" && npm install && npm run check:sql-encoding -w server && node netlify/database/apply-sql.mjs && npm run build -w shared && npm run build -w client"
   publish = "client/dist"
 
 [build.environment]

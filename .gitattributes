@@ -1,0 +1,19 @@
+# Normalize line endings; keep SQL as UTF-8 without BOM in the working tree.
+* text=auto eol=lf
+
+*.sql text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+
+*.xlsx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

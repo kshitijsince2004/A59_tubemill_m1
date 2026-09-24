@@ -25,6 +25,9 @@ jobs:
       - name: Migration parity
         run: npm run check:migration-parity -w server
 
+      - name: SQL encoding (no UTF-8 BOM)
+        run: npm run check:sql-encoding -w server
+
       - name: Smoke unauth (skips without SERVER_URL)
         run: npm run smoke:unauth -w server
         env:

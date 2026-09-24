@@ -65,8 +65,10 @@ async function main() {
       console.log(`[apply-sql] skip ${id}`);
       continue;
     }
-    const sql = fs.readFileSync(path.join(sqlDir, file), 'utf8');
-    console.log(`[apply-sql] apply ${id} (${sql.length} bytes)…`);
+    // Strip UTF-8 BOM if present — PostgreSQL rejects it as syntax error near "".
+    let sql = fs.readFileSync(path.join(sqlDir, file), 'utf8');
+    if (sql.charCodeAt(0) === 0xfeff) sql = sql.slice(1);
+    console.log(`[apply-sql] apply ${id} (${Buffer.byteLength(sql, 'utf8')} bytes)…`);
     const started = Date.now();
     try {
       await client.query('BEGIN');
