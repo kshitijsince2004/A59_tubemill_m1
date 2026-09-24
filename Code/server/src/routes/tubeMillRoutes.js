@@ -177,6 +177,7 @@ router.get('/tubemill/session', authMiddleware, (req, res, next) => {
     bcAdapter: config.bcAdapter,
     tenantId: config.tenantId,
     superTokens: config.superTokensEnabled,
+    demoSessions: config.demoSessionsEnabled,
     allowHeaderRole: config.allowHeaderRole
   });
 });

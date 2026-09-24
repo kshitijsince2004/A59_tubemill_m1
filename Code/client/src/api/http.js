@@ -53,7 +53,28 @@ function shouldAttemptRefresh(path) {
   return Boolean(getAccessToken() || getRefreshToken());
 }
 
+function isDemoSessionToken(token) {
+  return typeof token === 'string' && token.startsWith('a59.1.');
+}
+
 async function doRefreshSession() {
+  const refresh = getRefreshToken();
+  const access = getAccessToken();
+
+  // HMAC demo sessions (Netlify without SuperTokens Core) — never call ST web-js.
+  if (isDemoSessionToken(refresh) || isDemoSessionToken(access)) {
+    if (!refresh) return false;
+    const res = await fetch(`${BASE}/auth/session/refresh`, {
+      method: 'POST',
+      headers: {
+        'st-auth-mode': 'header',
+        Authorization: `Bearer ${refresh}`,
+      },
+    });
+    captureSessionHeaders(res);
+    return res.ok;
+  }
+
   // Prefer SuperTokens web-js when it already owns a session (staff email login).
   try {
     const { initSuperTokensClient, Session, syncAccessTokenFromSession } = await import(
@@ -71,7 +92,6 @@ async function doRefreshSession() {
     /* fall through to manual refresh */
   }
 
-  const refresh = getRefreshToken();
   if (!refresh) return false;
 
   // Header-mode refresh requires Authorization: Bearer <refresh_token>

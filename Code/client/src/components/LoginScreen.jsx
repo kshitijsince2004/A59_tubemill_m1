@@ -33,12 +33,32 @@ export default function LoginScreen({ onUnlocked }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [allowHeader, setAllowHeader] = useState(false);
+  /** null = probing; true = ST Core; false = HMAC demo sessions */
+  const [superTokensOn, setSuperTokensOn] = useState(null);
 
   useEffect(() => {
-    initSuperTokensClient();
     let cancelled = false;
     void (async () => {
-      // Drop half-dead SuperTokens sessions so probes do not refresh-loop.
+      let stEnabled = false;
+      try {
+        const r = await fetch('/api/tubemill/session', {
+          headers: { 'st-auth-mode': 'header' },
+        });
+        const j = await r.json();
+        if (cancelled) return;
+        setAllowHeader(Boolean(j?.data?.allowHeaderRole));
+        stEnabled = j?.data?.superTokens === true;
+        setSuperTokensOn(stEnabled);
+      } catch {
+        if (!cancelled) setSuperTokensOn(false);
+      }
+      if (cancelled) return;
+
+      // Only touch SuperTokens web-js when the API actually has ST Core.
+      // Demo HMAC sessions must not trigger ST refresh against a dead Core.
+      if (!stEnabled) return;
+
+      initSuperTokensClient();
       try {
         const { Session } = await import('../lib/supertokens');
         if (await Session.doesSessionExist()) {
@@ -48,16 +68,6 @@ export default function LoginScreen({ onUnlocked }) {
         }
       } catch {
         await signOutSession();
-      }
-      if (cancelled) return;
-      try {
-        const r = await fetch('/api/tubemill/session', {
-          headers: { 'st-auth-mode': 'header' },
-        });
-        const j = await r.json();
-        if (!cancelled) setAllowHeader(Boolean(j?.data?.allowHeaderRole));
-      } catch {
-        /* ignore */
       }
     })();
     return () => {
@@ -93,7 +103,9 @@ export default function LoginScreen({ onUnlocked }) {
       // Do not wipe it via ST client sync when web-js has no session yet.
       await syncAccessTokenFromSession();
       if (!getAccessToken()) {
-        throw new Error('Login succeeded but no session token received — check SuperTokens');
+        throw new Error(
+          'Login succeeded but no session token received — check API headers (st-access-token) / SuperTokens'
+        );
       }
       try {
         const me = await authApi.me();
@@ -152,6 +164,9 @@ export default function LoginScreen({ onUnlocked }) {
     setError(null);
     setBusy(true);
     try {
+      if (superTokensOn !== true) {
+        throw new Error('Staff email login needs SuperTokens Core — use Badge / PIN on this deploy');
+      }
       await staffSignIn(email.trim(), password);
       const me = await authApi.me();
       await afterLogin(me.user);
@@ -185,7 +200,7 @@ export default function LoginScreen({ onUnlocked }) {
       _jsxs("div", { className: "login-screen__card", children: [/*#__PURE__*/
         _jsx("h1", { children: "Sign in" }), /*#__PURE__*/
         _jsx("p", { className: "muted", children: "Badge ID + 4-digit PIN for operators, machine heads, and admin" }), /*#__PURE__*/
-        _jsxs("div", { className: "login-screen__modes", children: [/*#__PURE__*/
+        superTokensOn === true ? _jsxs("div", { className: "login-screen__modes", children: [/*#__PURE__*/
           _jsx("button", {
             type: "button",
             className: mode === 'badge' ? 'process-nav__item active' : 'process-nav__item',
@@ -200,9 +215,9 @@ export default function LoginScreen({ onUnlocked }) {
             "Staff email" }
 
           )] }
-        ),
+        ) : null,
         error && /*#__PURE__*/_jsx("div", { className: "error-strip", children: error }),
-        mode === 'badge' ? /*#__PURE__*/
+        mode === 'badge' || superTokensOn !== true ? /*#__PURE__*/
         _jsxs(_Fragment, { children: [/*#__PURE__*/
           _jsx("label", { className: "eyebrow", children: "Badge ID" }), /*#__PURE__*/
           _jsx(ZInput, {
