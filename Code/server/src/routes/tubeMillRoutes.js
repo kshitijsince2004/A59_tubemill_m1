@@ -161,17 +161,14 @@ router.get('/health', async (_req, res) => {
   });
 });
 
-router.get('/tubemill/session', authMiddleware, (req, res, next) => {
-  // Public probe only when header-role escape hatch is on; otherwise require auth (smoke 401).
-  if (!config.allowHeaderRole) {
-    return requireAuth(req, res, next);
-  }
-  next();
-}, (req, res) => {
+router.get('/tubemill/session', authMiddleware, (req, res) => {
+  // Always public config probe (login UI needs ST / demo-session flags before auth).
+  // User is only populated when a valid session is present.
   const authed = req;
   ok(res, {
-    role: authed.appRole ?? config.staticAppRole,
+    role: authed.user ? (authed.appRole ?? config.staticAppRole) : null,
     user: authed.user ?? null,
+    authenticated: Boolean(authed.user),
     authMode: config.authMode,
     collectorMode: config.collectorMode,
     bcAdapter: config.bcAdapter,
