@@ -7,7 +7,7 @@ DECLARE
   tid uuid := '00000000-0000-4000-8000-000000000001';
   pin text := 'scrypt$b136b62a68b7480dbec1fea7c68e3be9$262ddfa489e5a9850eb5065e44971acccb4c81fc4338005642011abea35fdb2ed3dcf3e866f2ac19164f2a24805f1f9db1b4f069bd18b1eedcec052a0f979da0';
   uid uuid;
-  run_id uuid;
+  v_run_id uuid;
   d int;
   day_ts timestamptz;
   u record;
@@ -155,7 +155,7 @@ BEGIN
     day_ts := date_trunc('day', now() AT TIME ZONE 'UTC')
               - ((6 - d) || ' days')::interval
               + interval '10 hours';
-    run_id := NULL;
+    v_run_id := NULL;
 
     INSERT INTO txn.prod_tm_run (
       tenant_id, run_no, mill_code, work_order_no, bc_batch_number, customer_code, grade_code,
@@ -172,34 +172,34 @@ BEGIN
     WHERE NOT EXISTS (
       SELECT 1 FROM txn.prod_tm_run r WHERE r.tenant_id = tid AND r.run_no = 'TM-DEMO-D' || d
     )
-    RETURNING id INTO run_id;
+    RETURNING id INTO v_run_id;
 
-    IF run_id IS NULL THEN
-      SELECT id INTO run_id FROM txn.prod_tm_run
+    IF v_run_id IS NULL THEN
+      SELECT id INTO v_run_id FROM txn.prod_tm_run
       WHERE tenant_id = tid AND run_no = 'TM-DEMO-D' || d;
     END IF;
 
-    IF run_id IS NOT NULL THEN
+    IF v_run_id IS NOT NULL THEN
       INSERT INTO txn.stoppage_entry (
         tenant_id, run_id, mill_code, stoppage_code, category, from_time, to_time,
         duration_min, reason, is_planned, is_open, process_code, source_id, created_at
       )
-      SELECT tid, run_id, 'A-59', 'TM-0' || (1 + (d % 3)), 'MECH',
+      SELECT tid, v_run_id, 'A-59', 'TM-0' || (1 + (d % 3)), 'MECH',
              day_ts + interval '2 hours', day_ts + interval '2 hours 20 minutes',
-             20 + d, 'Demo stoppage day ' || d, false, false, 'TM', run_id, day_ts
+             20 + d, 'Demo stoppage day ' || d, false, false, 'TM', v_run_id, day_ts
       WHERE NOT EXISTS (
         SELECT 1 FROM txn.stoppage_entry s
-        WHERE s.tenant_id = tid AND s.run_id = run_id AND s.reason = 'Demo stoppage day ' || d
+        WHERE s.tenant_id = tid AND s.run_id = v_run_id AND s.reason = 'Demo stoppage day ' || d
       );
 
       INSERT INTO txn.tm_defect (
         tenant_id, run_id, defect_code, quantity_mt, pieces, remark, created_by, created_at
       )
-      SELECT tid, run_id, 'D-SEAM', 0.05 + d * 0.01, 2 + d,
+      SELECT tid, v_run_id, 'D-SEAM', 0.05 + d * 0.01, 2 + d,
              'Demo defect day ' || d, 'seed', day_ts
       WHERE NOT EXISTS (
         SELECT 1 FROM txn.tm_defect x
-        WHERE x.tenant_id = tid AND x.run_id = run_id AND x.remark = 'Demo defect day ' || d
+        WHERE x.tenant_id = tid AND x.run_id = v_run_id AND x.remark = 'Demo defect day ' || d
       );
     END IF;
 
