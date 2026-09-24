@@ -130,6 +130,10 @@ export const drawBenchApi = {
     apiRequest('/drawbench/lots', { method: 'POST', body: JSON.stringify(body) }),
   updateLot: (id, body) =>
     apiRequest(`/drawbench/lots/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  start: (id) => apiRequest(`/drawbench/lots/${id}/start`, { method: 'POST' }),
+  end: (id) => apiRequest(`/drawbench/lots/${id}/end`, { method: 'POST' }),
+  hold: (id) => apiRequest(`/drawbench/lots/${id}/hold`, { method: 'POST' }),
+  resume: (id) => apiRequest(`/drawbench/lots/${id}/resume`, { method: 'POST' }),
   submit: (id) => apiRequest(`/drawbench/lots/${id}/submit`, { method: 'POST' }),
   approve: (id) => apiRequest(`/drawbench/lots/${id}/approve`, { method: 'POST' }),
   board: () => apiRequest('/drawbench/board'),

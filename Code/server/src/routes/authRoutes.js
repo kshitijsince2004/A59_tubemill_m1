@@ -86,16 +86,18 @@ router.post('/auth/supervisor-override', async (req, res) => {
   try {
     const empCode = String(req.body?.empCode ?? req.body?.badge ?? '');
     const pin = String(req.body?.pin ?? '');
-    const result = await verifySupervisorOverridePin(empCode, pin);
+    const action = String(req.body?.action ?? 'APPROVE');
+    const resourceId = req.body?.resourceId != null ? String(req.body.resourceId) : null;
+    const result = await verifySupervisorOverridePin(empCode, pin, { action, resourceId });
     if (!result.ok) {
       res.status(result.status).json({ data: null, errors: [{ message: result.message }] });
       return;
     }
+    // Return scoped token only — do not leak full grant objects (audit F10).
     res.json({
       data: {
         ok: true,
         override: result.override,
-        user: result.user,
       },
       errors: null,
     });
@@ -108,11 +110,29 @@ router.post('/auth/supervisor-override', async (req, res) => {
   }
 });
 
+// Always 200 — expired/missing tokens must not 401 and trigger a refresh loop.
+// When SuperTokens is enabled, Session.signOut() hits the ST recipe path first;
+// this route remains for ST-disabled / legacy clients.
 router.post('/auth/signout', authMiddleware, async (req, res) => {
   try {
+    const userId = req.user?.userId;
+    if (userId) {
+      try {
+        const { closeActiveSessionsForOperator } = await import(
+          '../services/MachineSessionService.js'
+        );
+        await closeActiveSessionsForOperator(userId);
+      } catch (e) {
+        console.warn('[auth/signout] session close failed', e instanceof Error ? e.message : e);
+      }
+    }
     if (config.superTokensEnabled) {
-      const session = await Session.getSession(req, res, { sessionRequired: false });
-      if (session) await session.revokeSession();
+      try {
+        const session = await Session.getSession(req, res, { sessionRequired: false });
+        if (session) await session.revokeSession();
+      } catch {
+        /* expired / try-refresh / already gone — still signed out locally */
+      }
     }
     res.json({ data: { ok: true }, errors: null });
   } catch (err) {

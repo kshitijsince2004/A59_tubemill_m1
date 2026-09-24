@@ -1,28 +1,37 @@
 import { ZBadge, ZButton, SyncStatusBadge, statusTone } from '../../../ui';
 
-export default function StatusRail({
-  machineCode,
-  shiftLabel,
-  millStatus,
-  activeOrderId,
-  activeOrderStatus,
-  hold,
-  clock,
-  roleLabel,
-  processes,
-  processId,
-  onProcessChange,
-  onSetup,
-  setupDisabled,
-  onReadings,
-  onManualStop,
-  manualStopDisabled,
-  onEndShift,
-  endShiftDisabled,
-  onConsumption,
-  consumptionDisabled,
-  extraRight,
-}) {
+/**
+ * Top operator status strip. Optional actions are gated by callback props
+ * (undefined = hidden) so processes without HOLD/SETUP stay clean.
+ */
+export default function StatusRail(props) {
+  const {
+    machineCode,
+    shiftLabel,
+    millStatus,
+    activeOrderId,
+    activeOrderStatus,
+    hold,
+    clock,
+    roleLabel,
+    processes,
+    processId,
+    onProcessChange,
+    onSetup,
+    setupDisabled,
+    setupLabel = 'SETUP',
+    onReadings,
+    onHold,
+    holdDisabled,
+    onManualStop,
+    manualStopDisabled,
+    onEndShift,
+    endShiftDisabled,
+    onConsumption,
+    consumptionDisabled,
+    extraRight,
+  } = props ?? {};
+
   return (
     <header className="status-rail">
       <div className="status-rail__left">
@@ -57,7 +66,7 @@ export default function StatusRail({
 
       {activeOrderId ? (
         <div className="status-rail__active">
-          <span className="status-rail__active-label">Active Order</span>
+          <span className="status-rail__active-label">Active WO</span>
           <span className="status-rail__active-id font-mono" title={activeOrderId}>
             {activeOrderId}
           </span>
@@ -71,7 +80,7 @@ export default function StatusRail({
         <div className="status-rail__spacer" />
       )}
 
-      {onConsumption ? (
+      {typeof onConsumption === 'function' ? (
         <ZButton
           variant="ghost"
           size="sm"
@@ -91,22 +100,32 @@ export default function StatusRail({
         <SyncStatusBadge />
         <span className="status-rail__clock">{clock}</span>
         {roleLabel ? <ZBadge tone="idle">{roleLabel}</ZBadge> : null}
-        {onSetup ? (
+        {typeof onSetup === 'function' ? (
           <ZButton variant="accent" size="sm" disabled={setupDisabled} onClick={onSetup}>
-            SETUP
+            {setupLabel}
           </ZButton>
         ) : null}
-        {onReadings ? (
+        {typeof onReadings === 'function' ? (
           <ZButton variant="ghost" size="sm" onClick={onReadings}>
             READINGS
           </ZButton>
         ) : null}
-        {onManualStop ? (
-          <ZButton variant="danger-outline" size="sm" disabled={manualStopDisabled} onClick={onManualStop}>
+        {typeof onHold === 'function' ? (
+          <ZButton variant="accent" size="sm" disabled={holdDisabled} onClick={onHold}>
+            {hold ? 'RESUME' : 'HOLD'}
+          </ZButton>
+        ) : null}
+        {typeof onManualStop === 'function' ? (
+          <ZButton
+            variant="danger-outline"
+            size="sm"
+            disabled={manualStopDisabled}
+            onClick={onManualStop}
+          >
             MANUAL STOP
           </ZButton>
         ) : null}
-        {onEndShift ? (
+        {typeof onEndShift === 'function' ? (
           <ZButton variant="accent" size="sm" disabled={endShiftDisabled} onClick={onEndShift}>
             END SHIFT
           </ZButton>

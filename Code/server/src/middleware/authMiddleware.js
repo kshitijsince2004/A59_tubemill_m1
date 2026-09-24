@@ -1,22 +1,8 @@
-
 import crypto from 'crypto';
-
-
-
-
-
-
 import { ROLE_RANK } from '@a59/shared';
 import { config } from '../config';
 import { Session } from '../config/authConfig';
-import { loadGrantsBySuperTokensUserId, loadGrantsByUserId } from '../services/authService';
-
-
-
-
-
-
-
+import { loadGrantsBySuperTokensUserId, loadGrantsByUserId, verifyOverrideToken } from '../services/authService';
 
 const VALID_ROLES = ['OPERATOR', 'MACHINE_HEAD', 'PLANT_HEAD', 'ADMIN'];
 
@@ -88,7 +74,8 @@ level)
 }
 
 async function hydrateFromHeader(req) {
-  if (!config.allowHeaderRole) return false;
+  // Defense in depth: never trust header/static roles in production.
+  if (config.isProduction || !config.allowHeaderRole) return false;
   const header = req.header('x-app-role') || req.header('x-demo-role');
   if (!header) {
     if (config.authMode === 'static') {
@@ -137,7 +124,9 @@ async function hydrateFromHeader(req) {
 }
 
 /**
- * Always sets tenantId. Prefers SuperTokens session; falls back to header/static only when allowed.
+ * Prefer SuperTokens session; fall back to header/static only when allowed.
+ * Expired access tokens throw TRY_REFRESH_TOKEN — let the ST error handler
+ * tell the client to refresh (do not swallow into anonymous).
  */
 export async function authMiddleware(req, res, next) {
   const authed = req;
@@ -148,10 +137,38 @@ export async function authMiddleware(req, res, next) {
       const session = await Session.getSession(req, res, { sessionRequired: false });
       if (session) {
         const stUserId = session.getUserId();
-        const payload = session.getAccessTokenPayload();
-        const user =
+        const payload = session.getAccessTokenPayload() ?? {};
+        let user =
           (await loadGrantsBySuperTokensUserId(stUserId)) ??
           (payload.appUserId ? await loadGrantsByUserId(String(payload.appUserId)) : null);
+
+        // Last resort: session payload already carries grants from createNewSession /
+        // mergeIntoAccessTokenPayload — keeps floor APIs alive if DB link lags.
+        if (!user && (payload.appUserId || payload.username || Array.isArray(payload.roles))) {
+          const roles = Array.isArray(payload.roles)
+            ? payload.roles.map((r) => String(r).toUpperCase())
+            : ['OPERATOR'];
+          const primary =
+            roles.includes('ADMIN')
+              ? 'ADMIN'
+              : roles.includes('PLANT_HEAD')
+                ? 'PLANT_HEAD'
+                : roles.includes('MACHINE_HEAD')
+                  ? 'MACHINE_HEAD'
+                  : roles[0] || 'OPERATOR';
+          user = {
+            userId: String(payload.appUserId || stUserId),
+            username: payload.username ?? 'operator',
+            fullName: payload.fullName ?? payload.username ?? 'Operator',
+            empCode: payload.empCode ?? null,
+            email: payload.email ?? null,
+            roles,
+            primaryRole: primary,
+            processAccess: Array.isArray(payload.processAccess) ? payload.processAccess : [],
+            machineAccess: Array.isArray(payload.machineAccess) ? payload.machineAccess : [],
+          };
+        }
+
         if (user) {
           authed.user = user;
           authed.appRole = user.primaryRole;
@@ -172,6 +189,8 @@ export async function authMiddleware(req, res, next) {
     }
     next();
   } catch (err) {
+    // SuperTokens TRY_REFRESH_TOKEN / UNAUTHORISED must reach stErrorHandler
+    // so the browser can call /api/auth/session/refresh and retry.
     next(err);
   }
 }
@@ -203,6 +222,46 @@ export function requireRole(...roles) {
 /** Desk roles: Machine Head + Plant Head escalation + Admin. */
 export function requireMachineHead(req, res, next) {
   requireRole('MACHINE_HEAD', 'PLANT_HEAD', 'ADMIN')(req, res, next);
+}
+
+/**
+ * Machine Head role OR a valid short-lived x-override-token for the action (audit F10).
+ * @param {string} [action='APPROVE']
+ * @param {(req: import('express').Request) => string | undefined} [getResourceId]
+ */
+export function requireMachineHeadOrOverride(action = 'APPROVE', getResourceId) {
+  return async (req, res, next) => {
+    const authed = req;
+    if (authed.user && (
+      authed.user.roles.includes('ADMIN') ||
+      authed.user.roles.includes('MACHINE_HEAD') ||
+      authed.user.roles.includes('PLANT_HEAD')
+    )) {
+      next();
+      return;
+    }
+    try {
+      const token = req.header('x-override-token') || '';
+      const resourceId = getResourceId ? getResourceId(req) : req.params?.id;
+      const verified = verifyOverrideToken(token, { action, resourceId });
+      if (verified) {
+        authed.override = verified;
+        next();
+        return;
+      }
+    } catch (err) {
+      next(err);
+      return;
+    }
+    if (!authed.user) {
+      res.status(401).json({ data: null, errors: [{ message: 'Unauthenticated' }] });
+      return;
+    }
+    res.status(403).json({
+      data: null,
+      errors: [{ message: 'Requires MACHINE_HEAD or a valid override token' }],
+    });
+  };
 }
 
 /** Plant / management report readers. */

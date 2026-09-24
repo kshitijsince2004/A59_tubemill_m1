@@ -1,10 +1,18 @@
-import { apiRequest } from './http';
-import { getAccessToken } from '../lib/authStore';
+import { apiRequest, getDevRoleOverride, tryRefreshSession } from './http';
+import {
+  getAccessToken,
+  setAccessToken,
+  setRefreshToken,
+} from '../lib/authStore';
 
 export const plantReportsApi = {
   dashboard: (windowDays = 7) =>
     apiRequest(`/reports/plant-head?windowDays=${encodeURIComponent(windowDays)}`),
   backlog: () => apiRequest('/reports/plant-head/backlog'),
+  trend: (windowDays = 7) =>
+    apiRequest(`/reports/plant-head/trend?windowDays=${encodeURIComponent(windowDays)}`),
+  stages: (windowDays = 7) =>
+    apiRequest(`/reports/plant-head/stages?windowDays=${encodeURIComponent(windowDays)}`),
   management: (period = '7d') =>
     apiRequest(`/reports/management?period=${encodeURIComponent(period)}`),
   drilldown: (params = {}) => {
@@ -31,12 +39,41 @@ export const plantReportsApi = {
 };
 
 export async function downloadPlantBlob(url, body) {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = getAccessToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const role = localStorage.getItem('a59-role');
-  if (role) headers['x-app-role'] = role;
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  const buildHeaders = () => {
+    const headers = {
+      'Content-Type': 'application/json',
+      'st-auth-mode': 'header',
+    };
+    const token = getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else {
+      const role = getDevRoleOverride() || localStorage.getItem('a59-role');
+      if (role) headers['x-app-role'] = role;
+    }
+    return headers;
+  };
+
+  let res = await fetch(url, {
+    method: 'POST',
+    headers: buildHeaders(),
+    body: JSON.stringify(body),
+  });
+  const access = res.headers.get('st-access-token');
+  if (access) setAccessToken(access);
+  const refreshHdr = res.headers.get('st-refresh-token');
+  if (refreshHdr) setRefreshToken(refreshHdr);
+
+  if (res.status === 401) {
+    const ok = await tryRefreshSession();
+    if (ok) {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: buildHeaders(),
+        body: JSON.stringify(body),
+      });
+    }
+  }
+
   if (!res.ok) {
     let msg = `Export failed (${res.status})`;
     try {

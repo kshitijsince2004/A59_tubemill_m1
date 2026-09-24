@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Code
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Code/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Migration parity
+        run: npm run check:migration-parity -w server
+
+      - name: Smoke unauth (skips without SERVER_URL)
+        run: npm run smoke:unauth -w server
+        env:
+          SERVER_URL: ${{ secrets.SERVER_URL }}

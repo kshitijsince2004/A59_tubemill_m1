@@ -76,6 +76,8 @@ function mapLot(row) {
     finalLenMm: row.final_len_mm != null ? Number(row.final_len_mm) : null,
     passType: row.pass_type ?? row.stage,
     acceptedMt: row.accepted_mt != null ? Number(row.accepted_mt) : null,
+    productionStartedAt: row.production_started_at ?? null,
+    productionEndedAt: row.production_ended_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? null,
     createdBy: row.created_by,
@@ -380,6 +382,20 @@ export async function createDrwLot(input) {
       input.shiftInchargeRef ?? null,
     ]
   );
+  try {
+    const { activeShiftLogId } = await import('./handover/productionGuard.js');
+    const sid = await activeShiftLogId(input.benchCode);
+    if (sid && row?.id) {
+      await query(`UPDATE txn.prod_db_lot SET shift_log_id = $1 WHERE id = $2 AND tenant_id = $3`, [
+        sid,
+        row.id,
+        config.tenantId,
+      ]);
+      row.shift_log_id = sid;
+    }
+  } catch {
+    /* best-effort */
+  }
   return mapLot(row);
 }
 
@@ -743,30 +759,99 @@ function currentShiftRef() {
   return 'C';
 }
 
-function lotHasProductionActivity(lot) {
-  if (!lot) return false;
-  return (
-    lot.accepted_pcs != null ||
-    lot.rejected_pcs != null ||
-    lot.drawn_metre != null ||
-    lot.operator_ref != null ||
-    (lot.from_od_mm != null && lot.to_od_mm != null)
-  );
-}
-
 function deriveDrwBoardStatus(lot, openStoppage) {
   if (openStoppage) return 'STOPPAGE';
   if (!lot) return 'IDLE';
   if (lot.status === 'APPROVED' || lot.status === 'SUBMITTED') return 'COMPLETE';
-  if (lot.status === 'HOLD') return 'STOPPAGE';
-  if (lot.status === 'DRAFT' && lotHasProductionActivity(lot)) return 'RUNNING';
+  if (lot.status === 'HOLD') return 'HOLD';
+  if (lot.production_ended_at) return 'COMPLETE';
+  if (lot.status === 'DRAFT' && lot.production_started_at && !lot.production_ended_at) {
+    return 'RUNNING';
+  }
   if (lot.status === 'DRAFT' && lot.work_order_no) return 'PREPARING';
   return 'IDLE';
 }
 
 /**
+ * Start production clock on a DRAFT lot (STP-shaped).
+ * Idempotent if already started and not ended.
+ */
+export async function startDrwProduction(id) {
+  const existing = await queryOne(`SELECT * FROM txn.prod_db_lot WHERE id = $1 AND tenant_id = $2`, [
+    id,
+    config.tenantId,
+  ]);
+  if (!existing) throw new Error('Draw Bench lot not found');
+  if (existing.status === 'APPROVED' || existing.status === 'SUBMITTED') {
+    throw new Error('Cannot start a submitted or approved lot');
+  }
+  if (existing.status === 'HOLD') throw new Error('Cannot start a held lot');
+  if (existing.production_ended_at) throw new Error('Production already ended');
+  if (!existing.work_order_no) throw new Error('Work order required before Start');
+  if (existing.production_started_at) return mapLot(existing);
+
+  const openStop = await queryOne(
+    `SELECT id FROM txn.stoppage_entry
+     WHERE tenant_id = $1 AND process_code = 'DRW' AND source_id = $2 AND is_open = true
+     LIMIT 1`,
+    [config.tenantId, id]
+  );
+  if (openStop) throw new Error('End open stoppage before Start');
+
+  if (!existing.shift_log_id) {
+    try {
+      const { activeShiftLogId } = await import('./handover/productionGuard.js');
+      const sid = await activeShiftLogId(existing.bench_code);
+      if (sid) {
+        await query(
+          `UPDATE txn.prod_db_lot SET shift_log_id = $1, updated_at = now()
+           WHERE id = $2 AND tenant_id = $3 AND shift_log_id IS NULL`,
+          [sid, id, config.tenantId]
+        );
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  const row = await queryOne(
+    `UPDATE txn.prod_db_lot SET production_started_at = now(), updated_at = now()
+     WHERE id = $1 AND tenant_id = $2 RETURNING *`,
+    [id, config.tenantId]
+  );
+  return mapLot(row);
+}
+
+/**
+ * End production clock. Closes any open stoppage. Does not change lot status
+ * (Submit / Approve remain separate).
+ */
+export async function endDrwProduction(id) {
+  const existing = await queryOne(`SELECT * FROM txn.prod_db_lot WHERE id = $1 AND tenant_id = $2`, [
+    id,
+    config.tenantId,
+  ]);
+  if (!existing) throw new Error('Draw Bench lot not found');
+  if (!existing.production_started_at) throw new Error('Start production before End');
+  if (existing.production_ended_at) return mapLot(existing);
+
+  try {
+    const { closeProcessStoppage } = await import('./ProcessStoppageService.js');
+    await closeProcessStoppage('DRW', id);
+  } catch {
+    /* no open stoppage */
+  }
+
+  const row = await queryOne(
+    `UPDATE txn.prod_db_lot SET production_ended_at = now(), updated_at = now()
+     WHERE id = $1 AND tenant_id = $2 RETURNING *`,
+    [id, config.tenantId]
+  );
+  return mapLot(row);
+}
+
+/**
  * Per-bench operator board: one row per DRW machine with derived status.
- * PLC connectivity is stubbed as "PLC pending" until Excel D-6 tag maps exist.
  */
 export async function getDrawBenchBoard() {
   const machines = await listDrawBenches();
@@ -836,7 +921,7 @@ export async function getDrawBenchBoard() {
               ? `${accepted} pcs`
               : null,
         lastSavedAt: lot?.updated_at ?? lot?.created_at ?? null,
-        plcStatus: 'PLC pending',
+        plcStatus: null,
         openStoppage: openStoppage
           ? {
               code: openStoppage.stoppage_code,
@@ -865,6 +950,20 @@ export async function assignDrawBenchOrder(benchCode, input = {}) {
   const existing = await findDrwLotByPassKey(workOrderNo, drawPass, benchCode);
   if (existing) {
     return { ...existing, deduped: true };
+  }
+
+  // One open lot per bench (matches furnace assign + IDLE/COMPLETE-gated UI).
+  const openOnBench = await queryOne(
+    `SELECT id, lot_no, status, work_order_no FROM txn.prod_db_lot
+     WHERE tenant_id = $1 AND bench_code = $2
+       AND status IN ('DRAFT', 'HOLD')
+     ORDER BY created_at DESC LIMIT 1`,
+    [config.tenantId, benchCode]
+  );
+  if (openOnBench) {
+    throw new Error(
+      `Draw bench ${benchCode} already has active lot ${openOnBench.lot_no} (${openOnBench.status})`
+    );
   }
 
   const order = await queryOne(

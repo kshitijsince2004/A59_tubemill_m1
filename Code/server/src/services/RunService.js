@@ -1,4 +1,4 @@
-import { query, queryOne } from '../db/pool';
+import { query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import { resolveRunDefaults, theoreticalTubeWeightKg, strictTheoreticalTubeWeightKg } from './ParamBandService';
 import {
@@ -22,10 +22,11 @@ const PROD_BUCKET_META = {
   SCRAP: { qualityClass: 'SCRAP', pq2Reason: null, finalSource: 'MANUAL' }
 };
 
-async function nextBundleNo(runId) {
+async function nextBundleNo(runId, client) {
   const row = await queryOne(
     `SELECT COALESCE(MAX(bundle_no), 0) + 1 AS n FROM txn.prod_tm_bundle WHERE run_id = $1`,
-    [runId]
+    [runId],
+    client
   );
   return Number(row?.n ?? 1);
 }
@@ -101,6 +102,8 @@ function formatRun(row, defaults) {
     remarks: row.remarks,
     timeFrom: row.time_from,
     timeTo: row.time_to,
+    createdAt: row.created_at ?? null,
+    createdBy: row.created_by ?? null,
     holdStatus: row.hold_status ?? 'NONE',
     remarksLog: Array.isArray(row.remarks_log) ? row.remarks_log : [],
     grossRuntimeS: row.gross_runtime_s ?? null,
@@ -131,31 +134,48 @@ setupType)
   if (!defaults) throw new Error(`No TM-02 chart entry for ${card.size_key} / ${thkMm} / ${card.grade_code}`);
 
   const runNo = `${millCode}-${Date.now()}`;
-  const run = await queryOne(
-    `INSERT INTO txn.prod_tm_run (
-      tenant_id, run_no, mill_code, work_order_no, bc_batch_number,
-      customer_code, grade_code, size, size_key, run_state, time_from, created_by, data_source
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'IDLE',NULL,'operator','MANUAL')
-    RETURNING *`,
-    [
-    config.tenantId,
-    runNo,
-    millCode,
-    card.work_order_no,
-    card.bc_batch_number,
-    card.customer_code,
-    card.grade_code,
-    JSON.stringify(card.size),
-    card.size_key]
+  const run = await withTransaction(async (client) => {
+    const created = await queryOne(
+      `INSERT INTO txn.prod_tm_run (
+        tenant_id, run_no, mill_code, work_order_no, bc_batch_number,
+        customer_code, grade_code, size, size_key, run_state, time_from, created_by, data_source
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'IDLE',NULL,'operator','MANUAL')
+      RETURNING *`,
+      [
+      config.tenantId,
+      runNo,
+      millCode,
+      card.work_order_no,
+      card.bc_batch_number,
+      card.customer_code,
+      card.grade_code,
+      JSON.stringify(card.size),
+      card.size_key],
+      client
+    );
 
-  );
+    if (!created) throw new Error('Failed to create run');
 
-  if (!run) throw new Error('Failed to create run');
+    // Production Console is manual-first: do not start collector / PLC.
+    // Operator presses START to begin RUNNING and record time_from.
 
-  // Production Console is manual-first: do not start collector / PLC.
-  // Operator presses START to begin RUNNING and record time_from.
+    await markQueueInProgress(queueCardId, created.id, client);
+    return created;
+  });
 
-  await markQueueInProgress(queueCardId, run.id);
+  try {
+    const { activeShiftLogId } = await import('./handover/productionGuard.js');
+    const sid = await activeShiftLogId(millCode);
+    if (sid) {
+      await query(`UPDATE txn.prod_tm_run SET shift_log_id = $1 WHERE id = $2 AND tenant_id = $3`, [
+        sid,
+        run.id,
+        config.tenantId,
+      ]);
+    }
+  } catch {
+    /* shift_log stamp is best-effort */
+  }
 
   await publishRunOpened({
     runId: run.id,
@@ -369,37 +389,39 @@ export async function addCoilInput(runId, input) {
   const run = await getRun(runId);
   if (!run) throw new Error('Run not found');
 
-  const row = await queryOne(
-    `INSERT INTO txn.prod_tm_coil_input (
-      tenant_id, run_id, coil_tag, grade_code, width_mm, thk_mm, swg, input_weight_kg, splice_seq, joint_marker,
-      slit_hardness, width_s_mm, width_m_mm, width_e_mm, thk_s_mm, thk_m_mm, thk_e_mm, rejection_remark, work_order_no
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-    RETURNING *`,
-    [
-    config.tenantId,
-    runId,
-    input.coilTag,
-    input.gradeCode ?? null,
-    input.widthMm ?? null,
-    input.thkMm ?? null,
-    input.swg ?? null,
-    input.inputWeightKg ?? null,
-    input.spliceSeq ?? null,
-    input.jointMarker ?? false,
-    input.slitHardness ?? null,
-    input.widthSMm ?? null,
-    input.widthMMm ?? null,
-    input.widthEMm ?? null,
-    input.thkSMm ?? null,
-    input.thkMMm ?? null,
-    input.thkEMm ?? null,
-    input.rejectionRemark ?? null,
-    input.workOrderNo ?? null]
+  return withTransaction(async (client) => {
+    const row = await queryOne(
+      `INSERT INTO txn.prod_tm_coil_input (
+        tenant_id, run_id, coil_tag, grade_code, width_mm, thk_mm, swg, input_weight_kg, splice_seq, joint_marker,
+        slit_hardness, width_s_mm, width_m_mm, width_e_mm, thk_s_mm, thk_m_mm, thk_e_mm, rejection_remark, work_order_no
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+      RETURNING *`,
+      [
+      config.tenantId,
+      runId,
+      input.coilTag,
+      input.gradeCode ?? null,
+      input.widthMm ?? null,
+      input.thkMm ?? null,
+      input.swg ?? null,
+      input.inputWeightKg ?? null,
+      input.spliceSeq ?? null,
+      input.jointMarker ?? false,
+      input.slitHardness ?? null,
+      input.widthSMm ?? null,
+      input.widthMMm ?? null,
+      input.widthEMm ?? null,
+      input.thkSMm ?? null,
+      input.thkMMm ?? null,
+      input.thkEMm ?? null,
+      input.rejectionRemark ?? null,
+      input.workOrderNo ?? null],
+      client
+    );
 
-  );
-
-  await recalcRunRollups(runId);
-  return row;
+    await recalcRunRollups(runId, client);
+    return row;
+  });
 }
 
 export async function addBundle(runId, bundle) {
@@ -411,48 +433,65 @@ export async function addBundle(runId, bundle) {
   bundle.weightKg ??
   theoreticalTubeWeightKg(size, bundle.pieces);
 
-  // Allocate next bundle_no safely (avoids collision with auto piece bundles)
-  const maxRow = await queryOne(
-    `SELECT COALESCE(MAX(bundle_no), 0)::int AS max_no FROM txn.prod_tm_bundle WHERE run_id = $1`,
-    [runId]
-  );
-  const requested = bundle.bundleNo;
-  const next = (maxRow?.max_no ?? 0) + 1;
-  const bundleNo =
-  Number.isFinite(requested) && requested > (maxRow?.max_no ?? 0) ? requested : next;
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await withTransaction(async (client) => {
+        const maxRow = await queryOne(
+          `SELECT COALESCE(MAX(bundle_no), 0)::int AS max_no FROM txn.prod_tm_bundle WHERE run_id = $1`,
+          [runId],
+          client
+        );
+        const requested = bundle.bundleNo;
+        const next = (maxRow?.max_no ?? 0) + 1;
+        const bundleNo =
+          Number.isFinite(requested) && requested > (maxRow?.max_no ?? 0) ? requested : next;
 
-  const row = await queryOne(
-    `INSERT INTO txn.prod_tm_bundle (
-      tenant_id, run_id, bundle_no, pieces, length_mm, weight_kg, weight_source, quality_class, pq2_reason
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    RETURNING *`,
-    [
-    config.tenantId,
-    runId,
-    bundleNo,
-    bundle.pieces,
-    bundle.lengthMm ?? size.lengthMm ?? null,
-    weightKg,
-    bundle.weightSource,
-    bundle.qualityClass,
-    bundle.pq2Reason ?? null]
+        const row = await queryOne(
+          `INSERT INTO txn.prod_tm_bundle (
+            tenant_id, run_id, bundle_no, pieces, length_mm, weight_kg, weight_source, quality_class, pq2_reason
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          RETURNING *`,
+          [
+            config.tenantId,
+            runId,
+            bundleNo,
+            bundle.pieces,
+            bundle.lengthMm ?? size.lengthMm ?? null,
+            weightKg,
+            bundle.weightSource,
+            bundle.qualityClass,
+            bundle.pq2Reason ?? null],
+          client
+        );
 
-  );
-
-  await recalcRunRollups(runId);
-  return row;
+        await recalcRunRollups(runId, client);
+        return row;
+      });
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+      if (code === '23505' && attempt < 2) {
+        lastErr = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr ?? new Error('Bundle insert failed after retries');
 }
 
-export async function recalcRunRollups(runId) {
+export async function recalcRunRollups(runId, client) {
   const coils = await queryOne(
     `SELECT COUNT(*)::int AS n, COALESCE(SUM(input_weight_kg), 0) AS total_kg
      FROM txn.prod_tm_coil_input WHERE run_id = $1`,
-    [runId]
+    [runId],
+    client
   );
 
   const bundles = await query(
     `SELECT quality_class, weight_kg, pieces FROM txn.prod_tm_bundle WHERE run_id = $1`,
-    [runId]
+    [runId],
+    client
   );
 
   let prime = null;
@@ -514,7 +553,8 @@ export async function recalcRunRollups(runId) {
       hasAnyWeight ? open : null,
       scrap,
       yieldPct
-    ]
+    ],
+    client
   );
 }
 
@@ -538,31 +578,34 @@ export async function updateProductionQuantities(runId, form) {
     { key: 'openNo', ...PROD_BUCKET_META.OPEN, pieces: form.openNo }
   ];
 
-  for (const bucket of buckets) {
-    if (bucket.pieces === undefined) continue;
-    await upsertCountBucket(runId, size, bucket);
-  }
+  await withTransaction(async (client) => {
+    for (const bucket of buckets) {
+      if (bucket.pieces === undefined) continue;
+      await upsertCountBucket(runId, size, bucket, client);
+    }
 
-  if (form.scrapWtMt !== undefined) {
-    await upsertScrapBucket(runId, form.scrapWtMt);
-  }
+    if (form.scrapWtMt !== undefined) {
+      await upsertScrapBucket(runId, form.scrapWtMt, client);
+    }
 
-  await recalcRunRollups(runId);
+    await recalcRunRollups(runId, client);
+  });
   return getRun(runId);
 }
 
-async function upsertCountBucket(runId, size, bucket) {
+async function upsertCountBucket(runId, size, bucket, client) {
   const existing = await queryOne(
     `SELECT id FROM txn.prod_tm_bundle
      WHERE run_id = $1 AND current_input_mode = 'MANUAL'
        AND quality_class = $2
        AND COALESCE(pq2_reason, '') = COALESCE($3, '')`,
-    [runId, bucket.qualityClass, bucket.pq2Reason]
+    [runId, bucket.qualityClass, bucket.pq2Reason],
+    client
   );
 
   if (bucket.pieces == null) {
     if (existing) {
-      await query(`DELETE FROM txn.prod_tm_bundle WHERE id = $1`, [existing.id]);
+      await query(`DELETE FROM txn.prod_tm_bundle WHERE id = $1`, [existing.id], client);
     }
     return;
   }
@@ -585,41 +628,55 @@ async function upsertCountBucket(runId, size, bucket) {
         final_source = $5,
         current_input_mode = 'MANUAL'
        WHERE id = $1`,
-      [existing.id, pieces, lengthMm, weightKg, bucket.finalSource]
+      [existing.id, pieces, lengthMm, weightKg, bucket.finalSource],
+      client
     );
     return;
   }
 
-  const bundleNo = await nextBundleNo(runId);
-  await query(
-    `INSERT INTO txn.prod_tm_bundle (
-      tenant_id, run_id, bundle_no, pieces, length_mm, weight_kg, weight_source,
-      quality_class, pq2_reason, final_source, current_input_mode
-    ) VALUES ($1,$2,$3,$4,$5,$6,'DERIVED',$7,$8,$9,'MANUAL')`,
-    [
-      config.tenantId,
-      runId,
-      bundleNo,
-      pieces,
-      lengthMm,
-      weightKg,
-      bucket.qualityClass,
-      bucket.pq2Reason,
-      bucket.finalSource
-    ]
-  );
+  const bundleNo = await nextBundleNo(runId, client);
+  let inserted = false;
+  for (let attempt = 0; attempt < 3 && !inserted; attempt++) {
+    const no = attempt === 0 ? bundleNo : await nextBundleNo(runId, client);
+    try {
+      await query(
+        `INSERT INTO txn.prod_tm_bundle (
+          tenant_id, run_id, bundle_no, pieces, length_mm, weight_kg, weight_source,
+          quality_class, pq2_reason, final_source, current_input_mode
+        ) VALUES ($1,$2,$3,$4,$5,$6,'DERIVED',$7,$8,$9,'MANUAL')`,
+        [
+          config.tenantId,
+          runId,
+          no,
+          pieces,
+          lengthMm,
+          weightKg,
+          bucket.qualityClass,
+          bucket.pq2Reason,
+          bucket.finalSource
+        ],
+        client
+      );
+      inserted = true;
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+      if (code === '23505' && attempt < 2) continue;
+      throw err;
+    }
+  }
 }
 
-async function upsertScrapBucket(runId, scrapWtMt) {
+async function upsertScrapBucket(runId, scrapWtMt, client) {
   const existing = await queryOne(
     `SELECT id FROM txn.prod_tm_bundle
      WHERE run_id = $1 AND current_input_mode = 'MANUAL' AND quality_class = 'SCRAP'`,
-    [runId]
+    [runId],
+    client
   );
 
   if (scrapWtMt == null) {
     if (existing) {
-      await query(`DELETE FROM txn.prod_tm_bundle WHERE id = $1`, [existing.id]);
+      await query(`DELETE FROM txn.prod_tm_bundle WHERE id = $1`, [existing.id], client);
     }
     return;
   }
@@ -637,30 +694,45 @@ async function upsertScrapBucket(runId, scrapWtMt) {
         final_source = 'MANUAL',
         current_input_mode = 'MANUAL'
        WHERE id = $1`,
-      [existing.id, weightKg]
+      [existing.id, weightKg],
+      client
     );
     return;
   }
 
-  const bundleNo = await nextBundleNo(runId);
-  await query(
-    `INSERT INTO txn.prod_tm_bundle (
-      tenant_id, run_id, bundle_no, pieces, weight_kg, weight_source,
-      quality_class, final_source, current_input_mode
-    ) VALUES ($1,$2,$3,0,$4,'MEASURED','SCRAP','MANUAL','MANUAL')`,
-    [config.tenantId, runId, bundleNo, weightKg]
-  );
+  let inserted = false;
+  for (let attempt = 0; attempt < 3 && !inserted; attempt++) {
+    const no = await nextBundleNo(runId, client);
+    try {
+      await query(
+        `INSERT INTO txn.prod_tm_bundle (
+          tenant_id, run_id, bundle_no, pieces, weight_kg, weight_source,
+          quality_class, final_source, current_input_mode
+        ) VALUES ($1,$2,$3,0,$4,'MEASURED','SCRAP','MANUAL','MANUAL')`,
+        [config.tenantId, runId, no, weightKg],
+        client
+      );
+      inserted = true;
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+      if (code === '23505' && attempt < 2) continue;
+      throw err;
+    }
+  }
 }
 
 export async function submitRun(runId) {
   const run = await getRun(runId);
   if (!run) throw new Error('Run not found');
   if (run.status !== 'DRAFT') throw new Error('Only DRAFT runs can be submitted');
-  await updateRuntimeRollups(runId);
-  await query(
-    `UPDATE txn.prod_tm_run SET status = 'SUBMITTED', time_to = now(), run_state = 'RUN_COMPLETE' WHERE id = $1`,
-    [runId]
-  );
+  await withTransaction(async (client) => {
+    await updateRuntimeRollups(runId, client);
+    await query(
+      `UPDATE txn.prod_tm_run SET status = 'SUBMITTED', time_to = now(), run_state = 'RUN_COMPLETE' WHERE id = $1`,
+      [runId],
+      client
+    );
+  });
   const closed = await getRun(runId);
   if (closed) {
     await publishRunClosed({
@@ -689,7 +761,9 @@ export async function approveRun(runId) {
   const run = await getRun(runId);
   if (!run) throw new Error('Run not found');
   if (run.status !== 'SUBMITTED') throw new Error('Run must be SUBMITTED before approve');
-  await query(`UPDATE txn.prod_tm_run SET status = 'APPROVED' WHERE id = $1`, [runId]);
+  await withTransaction(async (client) => {
+    await query(`UPDATE txn.prod_tm_run SET status = 'APPROVED' WHERE id = $1`, [runId], client);
+  });
   try {
     const { enqueueTmWriteback } = await import('../erp/ErpWritebackService.js');
     await enqueueTmWriteback(runId);
@@ -739,10 +813,10 @@ export async function getStoppages(runId) {
   });
 }
 
-export async function updateRunState(runId, runState) {
-  await query(`UPDATE txn.prod_tm_run SET run_state = $2 WHERE id = $1`, [runId, runState]);
-  const run = await queryOne(`SELECT mill_code FROM txn.prod_tm_run WHERE id = $1`, [runId]);
-  if (run) {
+export async function updateRunState(runId, runState, client) {
+  await query(`UPDATE txn.prod_tm_run SET run_state = $2 WHERE id = $1`, [runId, runState], client);
+  const run = await queryOne(`SELECT mill_code FROM txn.prod_tm_run WHERE id = $1`, [runId], client);
+  if (run && !client) {
     await publishMachineState({
       millCode: run.mill_code,
       runId,
@@ -750,24 +824,30 @@ export async function updateRunState(runId, runState) {
       at: new Date().toISOString()
     });
   }
+  return run?.mill_code ?? null;
 }
 
 export async function updateFirstOff(runId, result, approvedBy) {
-  await query(
-    `UPDATE txn.prod_tm_run SET first_off_status = $2, first_off_by = $3, first_off_at = now() WHERE id = $1`,
-    [runId, result, approvedBy]
-  );
-  await query(
-    `UPDATE txn.tm_setup SET first_off_result = $2, approved_by = $3, approved_at = now()
-     WHERE run_id = $1`,
-    [runId, result, approvedBy]
-  );
+  await withTransaction(async (client) => {
+    await query(
+      `UPDATE txn.prod_tm_run SET first_off_status = $2, first_off_by = $3, first_off_at = now() WHERE id = $1`,
+      [runId, result, approvedBy],
+      client
+    );
+    await query(
+      `UPDATE txn.tm_setup SET first_off_result = $2, approved_by = $3, approved_at = now()
+       WHERE run_id = $1`,
+      [runId, result, approvedBy],
+      client
+    );
+  });
 }
 
-export async function updateRuntimeRollups(runId) {
+export async function updateRuntimeRollups(runId, client) {
   const run = await queryOne(
     `SELECT time_from, time_to FROM txn.prod_tm_run WHERE id = $1`,
-    [runId]
+    [runId],
+    client
   );
   if (!run?.time_from) return;
   const end = run.time_to ? new Date(run.time_to) : new Date();
@@ -776,14 +856,16 @@ export async function updateRuntimeRollups(runId) {
   const stop = await queryOne(
     `SELECT COALESCE(SUM(COALESCE(duration_min, 0) * 60), 0)::text AS lost_s
      FROM txn.stoppage_entry WHERE run_id = $1`,
-    [runId]
+    [runId],
+    client
   );
   const lost = Math.floor(Number(stop?.lost_s ?? 0));
   const net = Math.max(0, gross - lost);
   await query(`UPDATE txn.prod_tm_run SET gross_runtime_s = $2, net_runtime_s = $3 WHERE id = $1`, [
   runId,
   gross,
-  net]
+  net],
+  client
   );
 }
 
@@ -791,29 +873,35 @@ export async function holdRun(runId, remark) {
   const run = await getRun(runId);
   if (!run) throw new Error('Run not found');
   if (run.status !== 'DRAFT') throw new Error('Only DRAFT runs can be held');
-  await query(`UPDATE txn.prod_tm_run SET hold_status = 'HELD' WHERE id = $1`, [runId]);
-  await markQueueHoldByRunId(runId);
-  if (remark) await appendRemark(runId, remark, 'HOLD');
+  await withTransaction(async (client) => {
+    await query(`UPDATE txn.prod_tm_run SET hold_status = 'HELD' WHERE id = $1`, [runId], client);
+    await markQueueHoldByRunId(runId, client);
+    if (remark) await appendRemark(runId, remark, 'HOLD', client);
+  });
   return getRun(runId);
 }
 
 export async function resumeRun(runId, remark) {
   const run = await getRun(runId);
   if (!run) throw new Error('Run not found');
-  await query(`UPDATE txn.prod_tm_run SET hold_status = 'NONE' WHERE id = $1`, [runId]);
-  await markQueueInProgressByRunId(runId);
-  if (remark) await appendRemark(runId, remark, 'RESUME');
+  await withTransaction(async (client) => {
+    await query(`UPDATE txn.prod_tm_run SET hold_status = 'NONE' WHERE id = $1`, [runId], client);
+    await markQueueInProgressByRunId(runId, client);
+    if (remark) await appendRemark(runId, remark, 'RESUME', client);
+  });
   return getRun(runId);
 }
 
-export async function appendRemark(runId, remark, kind = 'REMARK') {
+export async function appendRemark(runId, remark, kind = 'REMARK', client) {
   await query(
     `UPDATE txn.prod_tm_run SET
       remarks = $2,
       remarks_log = COALESCE(remarks_log, '[]'::jsonb) || $3::jsonb
      WHERE id = $1`,
-    [runId, remark, JSON.stringify([{ at: new Date().toISOString(), kind, remark }])]
+    [runId, remark, JSON.stringify([{ at: new Date().toISOString(), kind, remark }])],
+    client
   );
+  if (client) return null;
   return getRun(runId);
 }
 
@@ -826,36 +914,55 @@ export async function startProduction(runId) {
     return run;
   }
 
-  if (run.runState === 'IDLE') {
-    await query(
-      `UPDATE txn.prod_tm_run SET run_state = $2, time_from = COALESCE(time_from, now()) WHERE id = $1`,
-      [runId, transition('IDLE', 'PRODUCTION_STARTED')]
-    );
+  let publishState = null;
+
+  if (run.runState === 'IDLE' || run.runState === 'SETUP') {
+    await withTransaction(async (client) => {
+      await query(
+        `UPDATE txn.prod_tm_run SET run_state = $2, time_from = COALESCE(time_from, now()) WHERE id = $1`,
+        [runId, transition(run.runState, 'PRODUCTION_STARTED')],
+        client
+      );
+    });
+    publishState = 'RUNNING';
+  } else if (run.runState === 'FIRST_OFF_PENDING' && run.firstOffStatus === 'PASS') {
+    const next = transition('FIRST_OFF_PENDING', 'FIRST_OFF_PASS');
+    await withTransaction(async (client) => {
+      await updateRunState(runId, next, client);
+    });
+    publishState = next;
+  } else if (run.runState === 'ROLL_CHANGE') {
+    const next = transition('ROLL_CHANGE', 'LINE_STARTED');
+    await withTransaction(async (client) => {
+      await updateRunState(runId, next, client);
+    });
+    publishState = next;
+  } else if (run.runState === 'STOPPAGE') {
+    const next = transition('STOPPAGE', 'LINE_STARTED');
+    await withTransaction(async (client) => {
+      await updateRunState(runId, next, client);
+      await query(
+        `UPDATE txn.stoppage_entry SET
+          to_time = now(),
+          duration_min = EXTRACT(EPOCH FROM (now() - from_time)) / 60,
+          is_open = false
+         WHERE run_id = $1 AND is_open = true`,
+        [runId],
+        client
+      );
+    });
+    publishState = next;
+  } else {
+    throw new Error(`Cannot start from state ${run.runState}`);
+  }
+
+  if (publishState) {
     await publishMachineState({
       millCode: run.millCode,
       runId,
-      state: 'RUNNING',
+      state: publishState,
       at: new Date().toISOString()
     });
-    return getRun(runId);
-  }
-
-  if (run.runState === 'FIRST_OFF_PENDING' && run.firstOffStatus === 'PASS') {
-    await updateRunState(runId, transition('FIRST_OFF_PENDING', 'FIRST_OFF_PASS'));
-  } else if (run.runState === 'ROLL_CHANGE') {
-    await updateRunState(runId, transition('ROLL_CHANGE', 'LINE_STARTED'));
-  } else if (run.runState === 'STOPPAGE') {
-    await updateRunState(runId, transition('STOPPAGE', 'LINE_STARTED'));
-    await query(
-      `UPDATE txn.stoppage_entry SET
-        to_time = now(),
-        duration_min = EXTRACT(EPOCH FROM (now() - from_time)) / 60,
-        is_open = false
-       WHERE run_id = $1 AND is_open = true`,
-      [runId]
-    );
-  } else {
-    throw new Error(`Cannot start from state ${run.runState}`);
   }
 
   // Manual-first: do not start PLC collector.
@@ -869,27 +976,39 @@ export async function endProduction(runId, remark) {
   if (!['RUNNING', 'STOPPAGE', 'ROLL_CHANGE', 'SETUP', 'FIRST_OFF_PENDING', 'IDLE'].includes(state)) {
     throw new Error(`Cannot end from state ${state}`);
   }
-  if (remark?.trim()) {
-    await appendRemark(runId, remark.trim(), 'END');
-  }
 
-  // Close any open stoppage before completing.
-  await query(
-    `UPDATE txn.stoppage_entry SET
-      to_time = COALESCE(to_time, now()),
-      duration_min = COALESCE(
-        duration_min,
-        EXTRACT(EPOCH FROM (COALESCE(to_time, now()) - from_time)) / 60
-      ),
-      is_open = false
-     WHERE run_id = $1 AND is_open = true`,
-    [runId]
-  );
+  const nextState = transition(state, 'RUN_CLOSED');
+  await withTransaction(async (client) => {
+    if (remark?.trim()) {
+      await appendRemark(runId, remark.trim(), 'END', client);
+    }
 
-  await query(`UPDATE txn.prod_tm_run SET time_to = now() WHERE id = $1`, [runId]);
-  await updateRuntimeRollups(runId);
-  await updateRunState(runId, transition(state, 'RUN_CLOSED'));
-  await markQueueCompletedByRunId(runId);
+    // Close any open stoppage before completing.
+    await query(
+      `UPDATE txn.stoppage_entry SET
+        to_time = COALESCE(to_time, now()),
+        duration_min = COALESCE(
+          duration_min,
+          EXTRACT(EPOCH FROM (COALESCE(to_time, now()) - from_time)) / 60
+        ),
+        is_open = false
+       WHERE run_id = $1 AND is_open = true`,
+      [runId],
+      client
+    );
+
+    await query(`UPDATE txn.prod_tm_run SET time_to = now() WHERE id = $1`, [runId], client);
+    await updateRuntimeRollups(runId, client);
+    await updateRunState(runId, nextState, client);
+    await markQueueCompletedByRunId(runId, client);
+  });
+
+  await publishMachineState({
+    millCode: run.millCode,
+    runId,
+    state: nextState,
+    at: new Date().toISOString()
+  });
 
   // Ensure collector is not writing (safe no-op if never started).
   try {
@@ -910,46 +1029,70 @@ export async function rollChange(runId) {
   return getRun(runId);
 }
 
-export async function listRuns(millCode = 'A-59', limit = 50) {
+export async function listRuns(millCode = 'A-59', limit = 100) {
   const rows = await query(
-    `SELECT * FROM txn.prod_tm_run WHERE tenant_id = $1 AND mill_code = $2
-     ORDER BY created_at DESC LIMIT $3`,
+    `SELECT r.*,
+       s.id AS joined_setup_id,
+       s.id_tool AS setup_id_tool,
+       s.od_tool AS setup_od_tool,
+       s.boggie_size AS setup_boggie_size,
+       s.impeder_size AS setup_impeder_size,
+       s.ferrite_rod AS setup_ferrite_rod,
+       s.ss_rod AS setup_ss_rod,
+       s.work_coil_id AS setup_work_coil_id,
+       s.seam_guide AS setup_seam_guide,
+       s.weld_dia_mm AS setup_weld_dia_mm
+     FROM txn.prod_tm_run r
+     LEFT JOIN txn.tm_setup s ON s.run_id = r.id
+     WHERE r.tenant_id = $1 AND r.mill_code = $2
+     ORDER BY r.created_at DESC
+     LIMIT $3`,
     [config.tenantId, millCode, limit]
   );
-  return Promise.all(
-    rows.map(async (r) => {
-      const size = r.size;
-      const defaults = await resolveRunDefaults(r.size_key, size.thkMm ?? 0, r.grade_code ?? '1010');
-      const formatted = formatRun(r, defaults ?? undefined);
-      const setup = await queryOne(
-        `SELECT id_tool, od_tool, boggie_size, impeder_size, ferrite_rod, ss_rod, work_coil_id, seam_guide, weld_dia_mm
-         FROM txn.tm_setup WHERE run_id = $1`,
-        [r.id]
-      );
-      if (setup) {
-        formatted.tooling = {
-          idTool: setup.id_tool,
-          odTool: setup.od_tool,
-          boggieSize: setup.boggie_size,
-          impederSize: setup.impeder_size,
-          ferriteRod: setup.ferrite_rod,
-          ssRod: setup.ss_rod,
-          workCoilId: setup.work_coil_id,
-          seamGuide: setup.seam_guide,
-          weldDiaMm: setup.weld_dia_mm != null ? Number(setup.weld_dia_mm) : null
-        };
-        formatted.setupConfirmed = true;
-      }
-      return formatted;
-    })
-  );
+
+  /** @type {Map<string, Awaited<ReturnType<typeof resolveRunDefaults>>>} */
+  const defaultsCache = new Map();
+  const out = [];
+
+  for (const r of rows) {
+    const size = r.size;
+    const thk = size?.thkMm ?? 0;
+    const grade = r.grade_code ?? '1010';
+    const cacheKey = `${r.size_key}|${thk}|${grade}`;
+    let defaults = defaultsCache.get(cacheKey);
+    if (defaults === undefined) {
+      defaults = await resolveRunDefaults(r.size_key, thk, grade);
+      defaultsCache.set(cacheKey, defaults);
+    }
+    const formatted = formatRun(r, defaults ?? undefined);
+    if (r.joined_setup_id) {
+      formatted.tooling = {
+        idTool: r.setup_id_tool,
+        odTool: r.setup_od_tool,
+        boggieSize: r.setup_boggie_size,
+        impederSize: r.setup_impeder_size,
+        ferriteRod: r.setup_ferrite_rod,
+        ssRod: r.setup_ss_rod,
+        workCoilId: r.setup_work_coil_id,
+        seamGuide: r.setup_seam_guide,
+        weldDiaMm: r.setup_weld_dia_mm != null ? Number(r.setup_weld_dia_mm) : null
+      };
+      formatted.setupConfirmed = true;
+    }
+    out.push(formatted);
+  }
+
+  return out;
 }
 
 export async function claimHttpIdempotency(scope, key) {
   try {
     await query(`INSERT INTO txn.idempotency_key (scope, key) VALUES ($1, $2)`, [scope, key]);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    // Only unique violations mean a genuine duplicate (audit F11).
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+    if (code === '23505') return false;
+    throw err;
   }
 }

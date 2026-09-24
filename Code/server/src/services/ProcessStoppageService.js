@@ -47,12 +47,13 @@ export async function openProcessStoppage(input)
   );
 }
 
-export async function closeProcessStoppage(processCode, sourceId) {
+export async function closeProcessStoppage(processCode, sourceId, client) {
   return queryOne(
     `UPDATE txn.stoppage_entry SET is_open = false, to_time = now()
      WHERE tenant_id = $1 AND process_code = $2 AND source_id = $3 AND is_open = true
      RETURNING *`,
-    [config.tenantId, processCode, sourceId]
+    [config.tenantId, processCode, sourceId],
+    client
   );
 }
 

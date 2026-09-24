@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate:palette": "node scripts/validate_palette.mjs"
   },
   "dependencies": {
     "@a59/shared": "*",
@@ -14,6 +15,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.4",
+    "recharts": "^3.10.1",
     "supertokens-web-js": "^0.14.0"
   },
   "devDependencies": {

@@ -10,7 +10,8 @@ export const stpRules = [
   {
     field: 'qtyNo',
     label: 'Qty',
-    rules: [required('qtyNo', 'Qty'), range('qtyNo', 1, 100000, 'Qty')],
+    // Range only on progressive capture; create/submit enforce presence separately.
+    rules: [range('qtyNo', 1, 100000, 'Qty')],
   },
   {
     field: 'degreaseTempC',

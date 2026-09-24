@@ -45,6 +45,7 @@ import {
   requireAuth,
   requireProcessAccess,
   requireMachineHead,
+  requireMachineHeadOrOverride,
   requireWritable } from
 '../middleware/authMiddleware';
 
@@ -70,6 +71,7 @@ function fail(res, status, message, issues) {
 
 function failCaught(res, e, fallback) {
   if (e instanceof ValidationError) return fail(res, 422, e.message, e.issues);
+  if (e?.status === 403 || e?.status === 401 || e?.status === 409) return fail(res, e.status, e.message);
   fail(res, 400, e instanceof Error ? e.message : fallback);
 }
 
@@ -187,6 +189,8 @@ router.post('/stp/lots/assign', requireWritable, withIdempotency, async (req, re
 router.post('/stp/lots', requireWritable, withIdempotency, async (req, res) => {
   try {
     const parsed = stpCreateSchema.parse(req.body);
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(parsed.machineCode ?? 'STP-LINE', req.user);
     const warnings = await assertValid('STP', parsed);
     ok(res, { ...(await createStpLot(parsed)), warnings });
   } catch (e) {
@@ -196,9 +200,12 @@ router.post('/stp/lots', requireWritable, withIdempotency, async (req, res) => {
 
 router.put('/stp/lots/:id', requireWritable, withIdempotency, async (req, res) => {
   try {
-    const parsed = stpUpdateSchema.partial().parse({ ...req.body, id: paramId(req) });
-    const warnings = await assertValid('STP', parsed);
-    ok(res, { ...(await updateStpLot(paramId(req), parsed)), warnings });
+    const id = paramId(req);
+    const existing = await getStpLot(id);
+    if (!existing) return fail(res, 404, 'Not found');
+    const parsed = stpUpdateSchema.partial().parse({ ...req.body, id });
+    const warnings = await assertValid('STP', { ...existing, ...parsed });
+    ok(res, { ...(await updateStpLot(id, parsed)), warnings });
   } catch (e) {
     failCaught(res, e, 'Update failed');
   }
@@ -246,13 +253,27 @@ router.post('/stp/lots/:id/stages/advance', requireWritable, withIdempotency, as
 
 router.post('/stp/lots/:id/submit', requireWritable, withIdempotency, async (req, res) => {
   try {
-    ok(res, await setStpStatus(paramId(req), 'SUBMITTED'));
+    const id = paramId(req);
+    const lot = await getStpLot(id);
+    if (!lot) return fail(res, 404, 'Not found');
+    if (!lot.workOrderNo) {
+      return fail(res, 422, 'Work Order is required', [
+        { field: 'workOrderNo', message: 'Work Order is required', severity: 'ERROR' },
+      ]);
+    }
+    if (lot.qtyNo == null || lot.qtyNo === '') {
+      return fail(res, 422, 'Qty is required', [
+        { field: 'qtyNo', message: 'Qty is required', severity: 'ERROR' },
+      ]);
+    }
+    await assertValid('STP', lot);
+    ok(res, await setStpStatus(id, 'SUBMITTED'));
   } catch (e) {
-    fail(res, 400, e instanceof Error ? e.message : 'Submit failed');
+    failCaught(res, e, 'Submit failed');
   }
 });
 
-router.post('/stp/lots/:id/approve', requireMachineHead, withIdempotency, async (req, res) => {
+router.post('/stp/lots/:id/approve', requireMachineHeadOrOverride('APPROVE'), withIdempotency, async (req, res) => {
   try {
     const lot = await getStpLot(paramId(req));
     if (!lot) return fail(res, 404, 'Not found');

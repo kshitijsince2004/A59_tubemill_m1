@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { injectReport, buildBlankTemplate } from './render/TemplateInjector';
@@ -14,6 +15,7 @@ import layoutStp from './layouts/STP-FT-01A.v1.json';
 import layoutStp04 from './layouts/STP-FT-04.v1.json';
 import layoutStp06 from './layouts/STP-06.v1.json';
 import layoutTm from './layouts/TM-FT-02.v1.json';
+import { resolveCrewForMachineShift } from '../services/crewExportHelper';
 
 const REPORTS = [
 {
@@ -162,19 +164,31 @@ function templatesDir() {
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
   }
-  const fallback = path.resolve(__dirname, 'templates');
-  fs.mkdirSync(fallback, { recursive: true });
-  return fallback;
+  // Never mkdir into the bundle on Netlify (read-only). Prefer /tmp.
+  return path.join(os.tmpdir(), 'a59-export-templates');
 }
 
+/**
+ * Resolve template path or in-memory buffer. Never write into the deploy bundle.
+ * @returns {Promise<string | Buffer>}
+ */
 async function ensureTemplate(def, layout) {
   const dir = templatesDir();
   const file = path.join(dir, def.templateFile);
-  if (!fs.existsSync(file)) {
-    const buf = await buildBlankTemplate(layout);
-    fs.writeFileSync(file, buf);
+  if (fs.existsSync(file)) return file;
+
+  const buf = await buildBlankTemplate(layout);
+
+  // Cache under os.tmpdir when writable; otherwise return buffer for injectReport.
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const tmpFile = path.join(os.tmpdir(), 'a59-export-templates', def.templateFile);
+    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
+    fs.writeFileSync(tmpFile, buf);
+    return tmpFile;
+  } catch {
+    return buf;
   }
-  return file;
 }
 
 async function mapDbFt01(filters) {
@@ -202,13 +216,19 @@ async function mapDbFt01(filters) {
     ? String(first.prod_date).slice(0, 10)
     : new Date().toISOString().slice(0, 10);
   const headerShift = filters.shift ?? first?.shift_ref ?? '';
+  const machineCode = filters.machineCode ?? filters.benchCode ?? first?.bench_code;
+  const crewFooter = await resolveCrewForMachineShift(machineCode, headerDate, headerShift);
   return {
     header: {
       date: headerDate,
       shift: headerShift,
-      supervisor: filters.supervisor ?? first?.supervisor_ref ?? '',
-      incharge: filters.incharge ?? first?.shift_incharge_ref ?? '',
+      supervisor:
+        filters.supervisor ?? (crewFooter.supervisor || first?.supervisor_ref || ''),
+      incharge:
+        filters.incharge ?? (crewFooter.incharge || first?.shift_incharge_ref || ''),
+      crewNames: crewFooter.crewNames,
     },
+    crew: crewFooter.crew,
     rows: rows.map((r) => ({
       bench_code: r.bench_code,
       operator_ref: r.operator_ref,
@@ -363,14 +383,20 @@ async function mapAnnFt01(filters) {
   );
   const operatorName =
     filters.incharge ?? filters.supervisor ?? rows[0]?.created_by ?? '';
+  const headerDate = rows[0]?.prod_date
+    ? String(rows[0].prod_date).slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  const headerShift = filters.shift ?? rows[0]?.shift_ref ?? '';
+  const machineCode = filters.machineCode ?? filters.furnaceCode ?? rows[0]?.furnace_code;
+  const crewFooter = await resolveCrewForMachineShift(machineCode, headerDate, headerShift);
   return {
     header: {
-      date: rows[0]?.prod_date
-        ? String(rows[0].prod_date).slice(0, 10)
-        : new Date().toISOString().slice(0, 10),
-      shift: filters.shift ?? rows[0]?.shift_ref ?? '',
-      supervisor: filters.supervisor ?? rows[0]?.created_by ?? operatorName,
-      incharge: operatorName,
+      date: headerDate,
+      shift: headerShift,
+      supervisor:
+        filters.supervisor ?? (crewFooter.supervisor || rows[0]?.created_by || operatorName),
+      incharge: filters.incharge ?? (crewFooter.incharge || operatorName),
+      crewNames: crewFooter.crewNames,
       png_a: rows[0]?.png_a ?? rows[0]?.png_consumption ?? '',
       png_b: rows[0]?.png_b ?? '',
       png_c: rows[0]?.png_c ?? '',
@@ -378,6 +404,7 @@ async function mapAnnFt01(filters) {
       nh3_b: rows[0]?.nh3_b ?? '',
       nh3_c: rows[0]?.nh3_c ?? '',
     },
+    crew: crewFooter.crew,
     rows: rows.map((r, idx) => ({
       sl_no: idx + 1,
       customer_name: r.customer_code,
@@ -477,13 +504,21 @@ async function mapStpFt01a(filters) {
             [rows[0].id, config.tenantId]
           )
         : [];
+  const headerDate = rows[0]?.prod_date
+    ? String(rows[0].prod_date).slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  const headerShift = filters.shift ?? rows[0]?.shift_ref ?? '';
+  const machineCode = filters.machineCode ?? rows[0]?.machine_code ?? 'STP-01';
+  const crewFooter = await resolveCrewForMachineShift(machineCode, headerDate, headerShift);
   return {
     header: {
-      date: new Date().toISOString().slice(0, 10),
-      shift: filters.shift ?? rows[0]?.shift_ref ?? '',
-      supervisor: rows[0]?.created_by ?? '',
-      incharge: '',
+      date: headerDate,
+      shift: headerShift,
+      supervisor: filters.supervisor ?? (crewFooter.supervisor || rows[0]?.created_by || ''),
+      incharge: filters.incharge ?? (crewFooter.incharge || ''),
+      crewNames: crewFooter.crewNames,
     },
+    crew: crewFooter.crew,
     rows: rows.map((r, idx) => ({
       sl_no: idx + 1,
       customer_name: r.customer_code,
@@ -585,13 +620,20 @@ async function mapTmFt02(filters) {
     `SELECT * FROM txn.prod_tm_run WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC LIMIT 100`,
     params
   );
+  const mill = filters.machineCode ?? filters.mill ?? rows[0]?.mill_code ?? 'A-59';
+  const headerDate = new Date().toISOString().slice(0, 10);
+  const headerShift = filters.shift ?? '';
+  const crewFooter = await resolveCrewForMachineShift(mill, headerDate, headerShift);
   return {
     header: {
-      date: new Date().toISOString().slice(0, 10),
-      shift: filters.shift ?? '',
-      mill: 'A-59',
-      supervisor: '',
+      date: headerDate,
+      shift: headerShift,
+      mill,
+      supervisor: filters.supervisor ?? (crewFooter.supervisor || ''),
+      incharge: filters.incharge ?? (crewFooter.incharge || ''),
+      crewNames: crewFooter.crewNames,
     },
+    crew: crewFooter.crew,
     rows: rows.map((r) => ({
       work_order_no: r.work_order_no,
       grade_code: r.grade_code,

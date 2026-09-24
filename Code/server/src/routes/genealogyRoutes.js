@@ -80,29 +80,49 @@ router.get('/stoppages', async (req, res) => {
 
 router.post('/stoppages/open', requireWritable, async (req, res) => {
   try {
+    const processCode = String(req.body.processCode);
+    const sourceId = String(req.body.sourceId);
+    const millCode = req.body.millCode ? String(req.body.millCode) : undefined;
+    if (processCode.toUpperCase() === 'DRW') {
+      const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+      let machine = millCode && millCode !== 'DRW' ? millCode : null;
+      if (!machine) {
+        const { getDrwLot } = await import('../services/DrawBenchService.js');
+        const lot = await getDrwLot(sourceId);
+        machine = lot?.benchCode;
+      }
+      await guardProductionWrite(machine, req.user);
+    }
     ok(
       res,
       await openProcessStoppage({
-        processCode: String(req.body.processCode),
-        sourceId: String(req.body.sourceId),
+        processCode,
+        sourceId,
         stoppageCode: String(req.body.stoppageCode),
         reason: req.body.reason ? String(req.body.reason) : undefined,
-        millCode: req.body.millCode ? String(req.body.millCode) : undefined
+        millCode,
       })
     );
   } catch (e) {
-    fail(res, 400, e instanceof Error ? e.message : 'Open failed');
+    const status = e?.status === 409 || e?.status === 403 || e?.status === 401 ? e.status : 400;
+    fail(res, status, e instanceof Error ? e.message : 'Open failed');
   }
 });
 
 router.post('/stoppages/close', requireWritable, async (req, res) => {
   try {
-    ok(
-      res,
-      await closeProcessStoppage(String(req.body.processCode), String(req.body.sourceId))
-    );
+    const processCode = String(req.body.processCode);
+    const sourceId = String(req.body.sourceId);
+    if (processCode.toUpperCase() === 'DRW') {
+      const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+      const { getDrwLot } = await import('../services/DrawBenchService.js');
+      const lot = await getDrwLot(sourceId);
+      await guardProductionWrite(lot?.benchCode, req.user);
+    }
+    ok(res, await closeProcessStoppage(processCode, sourceId));
   } catch (e) {
-    fail(res, 400, e instanceof Error ? e.message : 'Close failed');
+    const status = e?.status === 409 || e?.status === 403 || e?.status === 401 ? e.status : 400;
+    fail(res, status, e instanceof Error ? e.message : 'Close failed');
   }
 });
 

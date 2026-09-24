@@ -22,6 +22,7 @@ export default function ZButton({
   `z-btn--${variant}`,
   block ? 'z-btn--block' : '',
   size === 'sm' ? 'z-btn--sm' : '',
+  size === 'glove' ? 'z-btn--glove' : '',
   className].
 
   filter(Boolean).

@@ -30,6 +30,8 @@ import {
   findDrwLotByPassKey,
   getDrawBenchBoard,
   assignDrawBenchOrder,
+  startDrwProduction,
+  endDrwProduction,
 } from '../services/DrawBenchService';
 import { buildDrawBenchExport, buildDrawBenchCsv } from '../services/DrawBenchExportService';
 import { listReports, renderReport } from '../export/ReportExportService';
@@ -41,6 +43,7 @@ import {
   requireAuth,
   requireProcessAccess,
   requireMachineHead,
+  requireMachineHeadOrOverride,
   requireWritable,
 } from '../middleware/authMiddleware';
 
@@ -67,15 +70,21 @@ function fail(res, status, message, issues) {
 function failCaught(res, e, fallback) {
   if (e instanceof ValidationError) return fail(res, 422, e.message, e.issues);
   if (e?.issues) return fail(res, 422, e.message, e.issues);
+  if (e?.status === 403 || e?.status === 401 || e?.status === 409) return fail(res, e.status, e.message);
   fail(res, 400, e instanceof Error ? e.message : fallback);
 }
 
 async function withIdempotency(req, res, next) {
-  const key = req.header('Idempotency-Key');
-  if (!key) return next();
-  const claimed = await claimHttpIdempotency(`http:${req.method}:${req.path}`, key);
-  if (!claimed) return fail(res, 409, 'Duplicate Idempotency-Key');
-  return next();
+  try {
+    const key = req.header('Idempotency-Key');
+    if (!key) return next();
+    const claimed = await claimHttpIdempotency(`http:${req.method}:${req.path}`, key);
+    if (!claimed) return fail(res, 409, 'Duplicate Idempotency-Key');
+    return next();
+  } catch (e) {
+    console.error('[drawbench] idempotency claim failed', e);
+    return fail(res, 500, e instanceof Error ? e.message : 'Idempotency failed');
+  }
 }
 
 function numQuery(v) {
@@ -99,6 +108,8 @@ router.get('/drawbench/board', async (_req, res) => {
 router.post('/drawbench/board/:benchCode/assign', requireWritable, withIdempotency, async (req, res) => {
   try {
     const benchCode = Array.isArray(req.params.benchCode) ? req.params.benchCode[0] : req.params.benchCode;
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(benchCode, req.user);
     const lot = await assignDrawBenchOrder(benchCode, req.body ?? {});
     const eligibility = await checkDbEligibility(benchCode, {
       odMm: lot.finalOdMm ?? lot.finalSize?.odMm,
@@ -106,6 +117,7 @@ router.post('/drawbench/board/:benchCode/assign', requireWritable, withIdempoten
     });
     ok(res, { ...lot, eligibility });
   } catch (e) {
+    console.error('[drawbench] assign failed', req.params.benchCode, e);
     failCaught(res, e, 'Assign failed');
   }
 });
@@ -183,6 +195,8 @@ router.get('/drawbench/lots/:id', async (req, res) => {
 router.post('/drawbench/lots', requireWritable, withIdempotency, async (req, res) => {
   try {
     const parsed = drwCreateSchema.parse(req.body);
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(parsed.benchCode, req.user);
     const row = {
       ...parsed,
       fromOdMm: parsed.fromOdMm ?? parsed.fromSize?.odMm,
@@ -223,6 +237,10 @@ router.post('/drawbench/lots', requireWritable, withIdempotency, async (req, res
 router.put('/drawbench/lots/:id', requireWritable, withIdempotency, async (req, res) => {
   try {
     const parsed = drwUpdateSchema.partial().parse({ ...req.body, id: paramId(req) });
+    const existing = await getDrwLot(paramId(req));
+    if (!existing) return fail(res, 404, 'Not found');
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(parsed.benchCode ?? existing.benchCode, req.user);
     const row = {
       ...parsed,
       fromOdMm: parsed.fromOdMm ?? parsed.fromSize?.odMm,
@@ -231,7 +249,6 @@ router.put('/drawbench/lots/:id', requireWritable, withIdempotency, async (req, 
       toThMm: parsed.toThMm ?? parsed.toSize?.thkMm,
       passType: parsed.stage,
     };
-    const existing = await getDrwLot(paramId(req));
     const master = await buildDrwValidationMaster(
       parsed.benchCode ?? existing?.benchCode,
       parsed.gradeCode ?? existing?.gradeCode
@@ -250,15 +267,69 @@ router.put('/drawbench/lots/:id', requireWritable, withIdempotency, async (req, 
   }
 });
 
+router.post('/drawbench/lots/:id/start', requireWritable, withIdempotency, async (req, res) => {
+  try {
+    const lot = await getDrwLot(paramId(req));
+    if (!lot) return fail(res, 404, 'Not found');
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(lot.benchCode, req.user);
+    ok(res, await startDrwProduction(paramId(req)));
+  } catch (e) {
+    failCaught(res, e, 'Start failed');
+  }
+});
+
+router.post('/drawbench/lots/:id/end', requireWritable, withIdempotency, async (req, res) => {
+  try {
+    const lot = await getDrwLot(paramId(req));
+    if (!lot) return fail(res, 404, 'Not found');
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(lot.benchCode, req.user);
+    ok(res, await endDrwProduction(paramId(req)));
+  } catch (e) {
+    failCaught(res, e, 'End failed');
+  }
+});
+
 router.post('/drawbench/lots/:id/submit', requireWritable, withIdempotency, async (req, res) => {
   try {
+    const lot = await getDrwLot(paramId(req));
+    if (!lot) return fail(res, 404, 'Not found');
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(lot.benchCode, req.user);
     ok(res, await setDrwStatus(paramId(req), 'SUBMITTED'));
   } catch (e) {
     failCaught(res, e, 'Submit failed');
   }
 });
 
-router.post('/drawbench/lots/:id/approve', requireMachineHead, withIdempotency, async (req, res) => {
+router.post('/drawbench/lots/:id/hold', requireWritable, withIdempotency, async (req, res) => {
+  try {
+    const lot = await getDrwLot(paramId(req));
+    if (!lot) return fail(res, 404, 'Not found');
+    if (lot.status !== 'DRAFT') return fail(res, 400, 'Only DRAFT lots can be held');
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(lot.benchCode, req.user);
+    ok(res, await setDrwStatus(paramId(req), 'HOLD'));
+  } catch (e) {
+    failCaught(res, e, 'Hold failed');
+  }
+});
+
+router.post('/drawbench/lots/:id/resume', requireWritable, withIdempotency, async (req, res) => {
+  try {
+    const lot = await getDrwLot(paramId(req));
+    if (!lot) return fail(res, 404, 'Not found');
+    if (lot.status !== 'HOLD') return fail(res, 400, 'Only HOLD lots can be resumed');
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(lot.benchCode, req.user);
+    ok(res, await setDrwStatus(paramId(req), 'DRAFT'));
+  } catch (e) {
+    failCaught(res, e, 'Resume failed');
+  }
+});
+
+router.post('/drawbench/lots/:id/approve', requireMachineHeadOrOverride('APPROVE'), withIdempotency, async (req, res) => {
   try {
     const lot = await getDrwLot(paramId(req));
     if (!lot) return fail(res, 404, 'Not found');
@@ -275,9 +346,13 @@ router.post('/drawbench/lots/:id/approve', requireMachineHead, withIdempotency, 
 
 router.post('/drawbench/lots/:id/shift-check', requireWritable, withIdempotency, async (req, res) => {
   try {
+    const lot = await getDrwLot(paramId(req));
+    if (!lot) return fail(res, 404, 'Not found');
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(lot.benchCode, req.user);
     ok(res, await addShiftCheck(drwShiftCheckSchema.parse({ ...req.body, lotId: paramId(req) })));
   } catch (e) {
-    fail(res, 400, e instanceof Error ? e.message : 'Shift check failed');
+    failCaught(res, e, 'Shift check failed');
   }
 });
 

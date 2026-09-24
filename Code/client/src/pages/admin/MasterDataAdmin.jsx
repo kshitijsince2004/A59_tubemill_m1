@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AdminShell } from '../../components/layout/admin';
-import { ZButton, ZInput } from '../../ui';
+import { ZButton, ZInput, showToast } from '../../ui';
+import { confirmDialog } from '../../components/ConfirmDialog';
 import { masterDataApi } from '../../api/masterDataApi';
 
 const ENTITIES = [
@@ -77,6 +78,7 @@ export default function MasterDataAdmin({ roleLabel, onLogout, firstFloorPath })
       await masterDataApi.create(entityType, buildBody());
       setForm(emptyForm(meta.fields));
       setEditId(null);
+      showToast('Master row saved');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Create failed');
@@ -108,6 +110,7 @@ export default function MasterDataAdmin({ roleLabel, onLogout, firstFloorPath })
       await masterDataApi.update(entityType, editId, body);
       setEditId(null);
       setForm(emptyForm(meta.fields));
+      showToast('Master row updated');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed');
@@ -115,11 +118,21 @@ export default function MasterDataAdmin({ roleLabel, onLogout, firstFloorPath })
   }
 
   async function remove(id) {
-    if (!window.confirm('Delete this row?')) return;
+    if (
+      !(await confirmDialog({
+        title: 'Delete row',
+        message: 'Delete this row?',
+        confirmLabel: 'Delete',
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setError(null);
     try {
       await masterDataApi.remove(entityType, id);
       if (editId === id) cancelEdit();
+      showToast('Master row deleted');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');

@@ -216,6 +216,175 @@ function buildAlerts({ yieldPct, oee, openStoppages, backlog, holds }) {
   return alerts;
 }
 
+/**
+ * Day-by-day plant trend over the window (for charts).
+ * @returns {{ windowDays: number, series: Array<{ date, primeMt, rawMt, scrapMt, yieldPct, downtimeMin, oee }> }}
+ */
+export async function getPlantHeadTrend(windowDays = 7) {
+  const tenant = TENANT();
+  const { days, since } = windowStart(windowDays);
+
+  const tmByDay = await safeQuery(
+    `SELECT (COALESCE(created_at, time_from)::date) AS d,
+            COALESCE(SUM(total_prime_mt),0)::float AS prime_mt,
+            COALESCE(SUM(raw_material_mt),0)::float AS raw_mt,
+            COALESCE(SUM(total_scrap_mt),0)::float AS scrap_mt
+     FROM txn.prod_tm_run
+     WHERE tenant_id = $1 AND COALESCE(created_at, time_from) >= $2
+     GROUP BY 1
+     ORDER BY 1`,
+    [tenant, since]
+  );
+
+  const dtByDay = await safeQuery(
+    `SELECT (from_time::date) AS d,
+            COALESCE(SUM(COALESCE(duration_min,
+              EXTRACT(EPOCH FROM (COALESCE(to_time, now()) - from_time))/60.0)),0)::float AS total_min
+     FROM txn.stoppage_entry
+     WHERE tenant_id = $1 AND from_time >= $2
+     GROUP BY 1
+     ORDER BY 1`,
+    [tenant, since]
+  );
+
+  const dtMap = new Map(
+    dtByDay.map((r) => [String(r.d).slice(0, 10), Number(r.total_min ?? 0)])
+  );
+  const tmMap = new Map(
+    tmByDay.map((r) => [
+      String(r.d).slice(0, 10),
+      {
+        primeMt: Number(r.prime_mt ?? 0),
+        rawMt: Number(r.raw_mt ?? 0),
+        scrapMt: Number(r.scrap_mt ?? 0),
+      },
+    ])
+  );
+
+  const series = [];
+  const start = new Date(since);
+  start.setUTCHours(0, 0, 0, 0);
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start.getTime() + i * 86400000);
+    const key = d.toISOString().slice(0, 10);
+    const tm = tmMap.get(key) ?? { primeMt: 0, rawMt: 0, scrapMt: 0 };
+    const downtimeMin = dtMap.get(key) ?? 0;
+    const yieldPct =
+      tm.rawMt > 0 ? Math.round((tm.primeMt / tm.rawMt) * 1000) / 10 : 0;
+    const plannedMin = 24 * 60;
+    const availability =
+      plannedMin > 0
+        ? Math.max(0, Math.min(100, Math.round((1 - downtimeMin / plannedMin) * 1000) / 10))
+        : 100;
+    const performance = 85;
+    const quality = yieldPct || 90;
+    const oee = Math.round(((availability * performance * quality) / 10000) * 10) / 10;
+    series.push({
+      date: key,
+      primeMt: tm.primeMt,
+      rawMt: tm.rawMt,
+      scrapMt: tm.scrapMt,
+      yieldPct,
+      downtimeMin,
+      oee,
+    });
+  }
+
+  return { windowDays: days, series };
+}
+
+/**
+ * Stage throughput along TM → FUR → STP → DRW → SWG.
+ */
+export async function getStageThroughput(windowDays = 7) {
+  const tenant = TENANT();
+  const { days, since } = windowStart(windowDays);
+
+  const tm = await safeQuery(
+    `SELECT COALESCE(SUM(raw_material_mt),0)::float AS input_mt,
+            COALESCE(SUM(total_prime_mt),0)::float AS output_mt,
+            COUNT(*)::int AS n
+     FROM txn.prod_tm_run
+     WHERE tenant_id = $1 AND COALESCE(created_at, time_from) >= $2`,
+    [tenant, since]
+  );
+  const fur = await safeQuery(
+    `SELECT COALESCE(SUM(COALESCE(total_mt,0)),0)::float AS output_mt,
+            COUNT(*)::int AS n
+     FROM txn.prod_ann_run
+     WHERE tenant_id = $1 AND COALESCE(updated_at, created_at) >= $2`,
+    [tenant, since]
+  );
+  const stp = await safeQuery(
+    `SELECT COALESCE(SUM(COALESCE(qty_mt,0)),0)::float AS output_mt,
+            COUNT(*)::int AS n,
+            COUNT(*) FILTER (WHERE qty_mt IS NOT NULL)::int AS with_mt
+     FROM txn.prod_stp_lot
+     WHERE tenant_id = $1 AND COALESCE(updated_at, created_at) >= $2`,
+    [tenant, since]
+  );
+  const drw = await safeQuery(
+    `SELECT COALESCE(SUM(COALESCE(accepted_mt, 0)),0)::float AS output_mt,
+            COUNT(*)::int AS n,
+            COUNT(*) FILTER (WHERE accepted_mt IS NOT NULL)::int AS with_mt
+     FROM txn.prod_db_lot
+     WHERE tenant_id = $1 AND COALESCE(created_at, now()) >= $2`,
+    [tenant, since]
+  );
+  const swg = await safeQuery(
+    `SELECT COUNT(*)::int AS n
+     FROM txn.prod_db_swage
+     WHERE tenant_id = $1 AND COALESCE(created_at, now()) >= $2`,
+    [tenant, since]
+  );
+
+  const stpMt = Number(stp[0]?.output_mt ?? 0);
+  const stpWithMt = Number(stp[0]?.with_mt ?? 0);
+  const drwMt = Number(drw[0]?.output_mt ?? 0);
+  const drwWithMt = Number(drw[0]?.with_mt ?? 0);
+
+  return {
+    windowDays: days,
+    stages: [
+      {
+        process: 'TM',
+        label: 'Tube Mill',
+        inputMt: Number(tm[0]?.input_mt ?? 0),
+        outputMt: Number(tm[0]?.output_mt ?? 0),
+        count: Number(tm[0]?.n ?? 0),
+      },
+      {
+        process: 'FUR',
+        label: 'Furnace',
+        inputMt: null,
+        outputMt: Number(fur[0]?.output_mt ?? 0),
+        count: Number(fur[0]?.n ?? 0),
+      },
+      {
+        process: 'STP',
+        label: 'STP',
+        inputMt: null,
+        outputMt: stpWithMt > 0 ? stpMt : null,
+        count: Number(stp[0]?.n ?? 0),
+      },
+      {
+        process: 'DRW',
+        label: 'Draw Bench',
+        inputMt: null,
+        outputMt: drwWithMt > 0 ? drwMt : null,
+        count: Number(drw[0]?.n ?? 0),
+      },
+      {
+        process: 'SWG',
+        label: 'Swaging',
+        inputMt: null,
+        outputMt: null,
+        count: Number(swg[0]?.n ?? 0),
+      },
+    ],
+  };
+}
+
 export async function getPlantHeadBacklog() {
   const live = await getMachineHeadDashboard({ roles: ['PLANT_HEAD'] });
   const byProcess = live?.byProcess ?? {};
@@ -532,10 +701,24 @@ export async function suggestCoils(q) {
 
 export async function getMachineHandoverSummary(millCode = 'A-59') {
   try {
+    const { getPendingForMachine, getHandoverOverview } = await import('./MachineHandoverService.js');
+    const pending = await getPendingForMachine(millCode);
+    const overview = await getHandoverOverview(null);
     const shifts = await listShifts(millCode);
-    return { millCode, shifts: shifts ?? [] };
+    return {
+      millCode,
+      pending,
+      awaitingAcceptance: overview.awaitingAcceptance,
+      recent: overview.recent?.slice(0, 10) ?? [],
+      shifts: shifts ?? [],
+    };
   } catch {
-    return { millCode, shifts: [] };
+    try {
+      const shifts = await listShifts(millCode);
+      return { millCode, shifts: shifts ?? [] };
+    } catch {
+      return { millCode, shifts: [] };
+    }
   }
 }
 

@@ -14,6 +14,7 @@
     "seed": "npm run seed -w server",
     "setup": "npm install && npm run migrate && npm run seed",
     "smoke:machine-head": "npm run smoke:machine-head -w server",
+    "smoke:dashboard-graphs": "npm run smoke:dashboard-graphs -w server",
     "reset-db": "docker compose down -v && docker compose up -d db supertokens && npm run migrate && npm run seed",
     "detype": "node scripts/detype.mjs"
   },

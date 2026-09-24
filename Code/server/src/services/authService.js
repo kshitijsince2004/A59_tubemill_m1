@@ -1,4 +1,4 @@
-
+import crypto from 'crypto';
 import { pickPrimaryRole } from '@a59/shared';
 import { query, queryOne } from '../db/pool';
 import { config } from '../config';
@@ -109,17 +109,9 @@ password)
   row.email?.trim().toLowerCase() ||
   `${(row.emp_code || row.username).toLowerCase().replace(/[^a-z0-9._-]/g, '')}@a59.local`;
 
-  const demoPasswords = {
-    'admin@a59.local': 'Admin123!',
-    'machinehead@a59.local': 'Super123!',
-    'mh.tm@a59.local': 'MhTm123!',
-    'mh.fur@a59.local': 'MhFur123!',
-    'mh.stp@a59.local': 'MhStp123!',
-    'mh.drw@a59.local': 'MhDrw123!',
-    'mh.swg@a59.local': 'MhSwg123!',
-    'planthead@a59.local': 'Plant123!'
-  };
-  const pwd = password || demoPasswords[email] || `A59-${row.user_id.slice(0, 8)}!`;
+  // Explicit password from admin provisioning, else unguessable one-time secret.
+  // Never derive from user_id or ship demo password maps (audit F3).
+  const pwd = password || crypto.randomBytes(32).toString('base64url');
 
   let stUserId = null;
   const signUp = await EmailPassword.signUp('public', email, pwd);
@@ -238,12 +230,73 @@ pin)
 /** Roles authorized to grant supervisor-override PIN (mechanism name preserved). */
 export const OVERRIDE_ROLES = ['MACHINE_HEAD', 'PLANT_HEAD', 'ADMIN'];
 
+const OVERRIDE_TTL_MS = 5 * 60 * 1000;
+
+function overrideSigningKey() {
+  return config.serviceToken || 'dev-service-token';
+}
+
+/**
+ * Issue a short-lived scoped override token bound to action + resource (audit F10).
+ * @param {{ grantedBy: string, action: string, resourceId?: string | null }} input
+ */
+export function issueOverrideToken(input) {
+  const expiresAt = new Date(Date.now() + OVERRIDE_TTL_MS).toISOString();
+  const body = {
+    grantedBy: input.grantedBy,
+    action: String(input.action || 'APPROVE').toUpperCase(),
+    resourceId: input.resourceId ? String(input.resourceId) : null,
+    exp: expiresAt,
+  };
+  const payload = Buffer.from(JSON.stringify(body), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', overrideSigningKey()).update(payload).digest('base64url');
+  return { token: `${payload}.${sig}`, expiresAt, action: body.action, resourceId: body.resourceId };
+}
+
+/**
+ * Verify an override token for a specific action and optional resource id.
+ * @returns {{ grantedBy: string, action: string, resourceId: string | null } | null}
+ */
+export function verifyOverrideToken(token, expected) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const [payload, sig] = token.split('.');
+  if (!payload || !sig) return null;
+  const expectedSig = crypto.createHmac('sha256', overrideSigningKey()).update(payload).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expectedSig);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  let body;
+  try {
+    body = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (!body?.exp || new Date(body.exp).getTime() < Date.now()) return null;
+  const action = String(expected?.action || 'APPROVE').toUpperCase();
+  if (String(body.action || '').toUpperCase() !== action) return null;
+  if (expected?.resourceId != null && body.resourceId != null && String(body.resourceId) !== String(expected.resourceId)) {
+    return null;
+  }
+  return {
+    grantedBy: String(body.grantedBy),
+    action: String(body.action).toUpperCase(),
+    resourceId: body.resourceId ?? null,
+  };
+}
+
 /**
  * Verify badge+PIN of an override authority. KEEP name verifySupervisorOverridePin.
+ * @param {string} empCode
+ * @param {string} pin
+ * @param {{ action?: string, resourceId?: string }} [scope]
  */
-export async function verifySupervisorOverridePin(empCode, pin) {
+export async function verifySupervisorOverridePin(empCode, pin, scope = {}) {
   if (!empCode?.trim() || !isValidPinFormat(pin)) {
     return { ok: false, message: 'Badge and 4-digit PIN required', status: 400 };
+  }
+  const action = String(scope.action || 'APPROVE').toUpperCase();
+  if (!action) {
+    return { ok: false, message: 'Override action is required', status: 400 };
   }
   const row = await queryOne(
     `SELECT user_id, username, full_name, emp_code, email, pin_hash, status,
@@ -278,14 +331,20 @@ export async function verifySupervisorOverridePin(empCode, pin) {
      WHERE user_id = $2 AND tenant_id = $3`,
     [cleared.pin_fail_count, row.user_id, config.tenantId]
   );
-  const user = await toSessionUser(row);
+  const issued = issueOverrideToken({
+    grantedBy: row.user_id,
+    action,
+    resourceId: scope.resourceId ?? null,
+  });
   return {
     ok: true,
-    user,
     override: {
-      grantedBy: user.userId,
-      empCode: user.empCode,
-      roles: user.roles,
+      token: issued.token,
+      expiresAt: issued.expiresAt,
+      action: issued.action,
+      resourceId: issued.resourceId,
+      grantedBy: row.user_id,
+      empCode: row.emp_code,
       at: new Date().toISOString(),
     },
   };

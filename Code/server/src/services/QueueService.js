@@ -15,6 +15,8 @@ import { config } from '../config';
 
 
 
+
+
 export async function getQueue(millCode) {
   return query(
     `SELECT * FROM ops.queue_card WHERE tenant_id = $1 AND mill_code = $2 ORDER BY id`,
@@ -29,35 +31,39 @@ export async function getQueueCard(id) {
   );
 }
 
-export async function markQueueInProgress(cardId, runId) {
+export async function markQueueInProgress(cardId, runId, client) {
   await query(
     `UPDATE ops.queue_card SET status = 'In Progress', run_id = $3
      WHERE tenant_id = $1 AND id = $2`,
-    [config.tenantId, cardId, runId]
+    [config.tenantId, cardId, runId],
+    client
   );
 }
 
-export async function markQueueHoldByRunId(runId) {
+export async function markQueueHoldByRunId(runId, client) {
   await query(
     `UPDATE ops.queue_card SET status = 'Hold'
      WHERE tenant_id = $1 AND run_id = $2`,
-    [config.tenantId, runId]
+    [config.tenantId, runId],
+    client
   );
 }
 
-export async function markQueueInProgressByRunId(runId) {
+export async function markQueueInProgressByRunId(runId, client) {
   await query(
     `UPDATE ops.queue_card SET status = 'In Progress'
      WHERE tenant_id = $1 AND run_id = $2`,
-    [config.tenantId, runId]
+    [config.tenantId, runId],
+    client
   );
 }
 
-export async function markQueueCompletedByRunId(runId) {
+export async function markQueueCompletedByRunId(runId, client) {
   await query(
     `UPDATE ops.queue_card SET status = 'Completed'
      WHERE tenant_id = $1 AND run_id = $2`,
-    [config.tenantId, runId]
+    [config.tenantId, runId],
+    client
   );
 }
 

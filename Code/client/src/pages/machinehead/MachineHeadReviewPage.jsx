@@ -14,6 +14,7 @@ export default function MachineHeadReviewPage({
 }) {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [detail, setDetail] = useState(null);
   const [holdNote, setHoldNote] = useState('');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -27,6 +28,17 @@ export default function MachineHeadReviewPage({
     void load().catch((e) => setMsg(e instanceof Error ? e.message : 'Load failed'));
   }, []);
 
+  async function selectItem(it) {
+    setSelected(it);
+    setDetail(null);
+    try {
+      const full = await apiRequest(`/reports/machine-head/${it.process}/${it.id}`);
+      setDetail(full);
+    } catch {
+      setDetail(null);
+    }
+  }
+
   async function act(action) {
     if (!selected) return;
     setBusy(true);
@@ -38,6 +50,7 @@ export default function MachineHeadReviewPage({
       });
       setMsg(`${action} ok`);
       setSelected(null);
+      setDetail(null);
       setHoldNote('');
       await load();
     } catch (e) {
@@ -68,7 +81,7 @@ export default function MachineHeadReviewPage({
                   <button
                     type="button"
                     className={`mh-list__item ${selected?.id === it.id ? 'active' : ''}`}
-                    onClick={() => setSelected(it)}
+                    onClick={() => void selectItem(it)}
                   >
                     <strong>
                       {it.process} · {it.machineCode}
@@ -107,6 +120,14 @@ export default function MachineHeadReviewPage({
                   <div>
                     <dt>Submitted</dt>
                     <dd className="muted">{selected.submittedAt ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Crew</dt>
+                    <dd>
+                      {(detail?.crewNames ?? []).length
+                        ? detail.crewNames.join(', ')
+                        : '—'}
+                    </dd>
                   </div>
                 </dl>
                 <div className="btn-row" style={{ marginTop: 12 }}>

@@ -168,9 +168,11 @@ export default function ParametersModule({
         open={formOpen}
         eyebrow="TM-04 · MANUAL"
         title="Add parameter reading"
-        description="Enter machine and coolant parameters for the current hour. Order/setup values stay display-only on the console."
+        description="Enter machine and coolant parameters for the current hour."
+        preventScrimClose
         onClose={() => setFormOpen(false)}
         footer={null}
+        className="modal-card--wide-tablet"
       >
         <ParamManualPanel
           disabled={disabled}

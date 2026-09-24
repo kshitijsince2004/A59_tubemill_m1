@@ -99,6 +99,20 @@ async function main() {
     detail: `status=${mhFromPh.status}`,
   });
 
+  const trend = await call('/api/reports/plant-head/trend?windowDays=7', { role: 'PLANT_HEAD' });
+  checks.push({
+    name: 'plant-head trend',
+    ok: trend.status === 200 && Array.isArray(trend.json?.data?.series),
+    detail: `status=${trend.status}`,
+  });
+
+  const stages = await call('/api/reports/plant-head/stages?windowDays=7', { role: 'PLANT_HEAD' });
+  checks.push({
+    name: 'plant-head stages',
+    ok: stages.status === 200 && Array.isArray(stages.json?.data?.stages),
+    detail: `status=${stages.status}`,
+  });
+
   const writeDeny = await call('/api/furnace/lots', {
     method: 'POST',
     role: 'PLANT_HEAD',

@@ -16,7 +16,9 @@ assert(
 
 const stpMissing = validateRecord(stpRules, { degreaseTempC: 80 });
 assert(errorsOnly(stpMissing).some((i) => i.field === 'workOrderNo'), 'WO required');
-assert(errorsOnly(stpMissing).some((i) => i.field === 'qtyNo'), 'Qty required');
+
+const stpPartial = validateRecord(stpRules, { degreaseTempC: 80 }, { mode: 'partial' });
+assert(errorsOnly(stpPartial).length === 0, 'partial mode skips omitted REQUIRED fields');
 
 const stpOk = validateRecord(stpRules, {
   workOrderNo: 'WO-1',

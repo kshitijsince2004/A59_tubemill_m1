@@ -4,6 +4,7 @@ import EmailPassword from 'supertokens-web-js/recipe/emailpassword';
 import { clearAuth, getAccessToken, setAccessToken } from './authStore';
 
 let initialized = false;
+let signingOut = false;
 
 export function initSuperTokensClient() {
   if (initialized) return;
@@ -66,13 +67,22 @@ export async function staffSignIn(email, password) {
 }
 
 export async function signOutSession() {
+  if (signingOut) {
+    clearAuth();
+    return;
+  }
+  signingOut = true;
+  // Wipe local tokens first so concurrent 401 handlers cannot re-enter refresh.
+  clearAuth();
   try {
     initSuperTokensClient();
     await Session.signOut();
   } catch {
-    /* ignore */
+    /* ignore network / already-signed-out */
+  } finally {
+    clearAuth();
+    signingOut = false;
   }
-  clearAuth();
 }
 
 export { Session, EmailPassword };

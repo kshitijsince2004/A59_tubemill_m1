@@ -68,6 +68,7 @@ export default function StpMachineOverview({
   selectedLot = null,
   onGoOrders,
   onOpenMonitoring,
+  onOpenProduction,
   onSelectUpcoming,
 }) {
   const liveQ = useQuery({
@@ -80,10 +81,13 @@ export default function StpMachineOverview({
   const summary = data.shiftSummary ?? {};
   const current = data.current ?? null;
   const upcoming = Array.isArray(data.upcoming) ? data.upcoming : [];
-  const displayLot = current || (selectedLot?.productionStartedAt && !selectedLot?.productionEndedAt ? selectedLot : null);
+  const displayLot =
+    current ||
+    (selectedLot && !selectedLot.productionEndedAt ? selectedLot : null);
   const status = clockLabel(displayLot);
   const next = upcoming[0] ?? null;
   const rest = upcoming.slice(1);
+  const productionLotId = displayLot?.id ?? selectedLot?.id ?? null;
 
   return /*#__PURE__*/ _jsxs('div', {
     className: 'stp-overview',
@@ -240,10 +244,19 @@ export default function StpMachineOverview({
                           }),
                         ],
                       }),
-                      /*#__PURE__*/ _jsx(ZButton, {
-                        variant: 'primary',
-                        onClick: () => onOpenMonitoring?.(displayLot.id),
-                        children: 'Open Bath & Chemical',
+                      /*#__PURE__*/ _jsxs('div', {
+                        className: 'stp-overview__actions',
+                        children: [
+                          /*#__PURE__*/ _jsx(ZButton, {
+                            variant: 'primary',
+                            onClick: () => onOpenProduction?.(displayLot.id),
+                            children: 'Open Production',
+                          }),
+                          /*#__PURE__*/ _jsx(ZButton, {
+                            onClick: () => onOpenMonitoring?.(displayLot.id),
+                            children: 'Open Bath & Chemical',
+                          }),
+                        ],
                       }),
                     ],
                   })
@@ -252,23 +265,33 @@ export default function StpMachineOverview({
                     children: [
                       /*#__PURE__*/ _jsx('p', {
                         className: 'stp-overview__empty-title',
-                        children: next
-                          ? 'Order preparing — not started'
-                          : 'No running order',
+                        children: selectedLot && !selectedLot.productionEndedAt
+                          ? 'Workorder assigned — not in console'
+                          : next
+                            ? 'Order preparing — not started'
+                            : 'No running order',
                       }),
                       /*#__PURE__*/ _jsx('p', {
                         className: 'muted',
-                        children: next
-                          ? `${next.workOrderNo}${
-                              next.lineNo != null ? ` L${next.lineNo}` : ''
-                            } is ready in queue (pos ${next.queuePosition ?? 1}). Start production from Orders to begin capture.`
-                          : 'Select a work order line from Orders to prepare the next STP run.',
+                        children: selectedLot && !selectedLot.productionEndedAt
+                          ? `${selectedLot.workOrderNo || 'Lot'} is assigned. Open Production to run the console.`
+                          : next
+                            ? `${next.workOrderNo}${
+                                next.lineNo != null ? ` L${next.lineNo}` : ''
+                              } is ready in queue (pos ${next.queuePosition ?? 1}). Assign from Workorder, then open Production.`
+                            : 'Select a workorder line from Workorder to prepare the next STP run.',
                       }),
-                      /*#__PURE__*/ _jsx(ZButton, {
-                        variant: 'primary',
-                        onClick: onGoOrders,
-                        children: '→ Go to Orders',
-                      }),
+                      productionLotId
+                        ? /*#__PURE__*/ _jsx(ZButton, {
+                            variant: 'primary',
+                            onClick: () => onOpenProduction?.(productionLotId),
+                            children: 'Open Production',
+                          })
+                        : /*#__PURE__*/ _jsx(ZButton, {
+                            variant: 'primary',
+                            onClick: onGoOrders,
+                            children: '→ Go to Workorder',
+                          }),
                     ],
                   }),
             ],
@@ -294,7 +317,7 @@ export default function StpMachineOverview({
                       /*#__PURE__*/ _jsx(NextCard, { item: next }),
                       /*#__PURE__*/ _jsx(ZButton, {
                         onClick: () => onSelectUpcoming?.(next),
-                        children: 'Open in Orders',
+                        children: 'Open in Workorder',
                       }),
                       rest.length
                         ? /*#__PURE__*/ _jsx('ul', {

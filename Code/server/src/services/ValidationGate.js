@@ -35,7 +35,8 @@ export class ValidationError extends Error {
  * Assert shared Zod/ruleset validation for a process row, with DB overlays when available.
  * @param {string} processCode
  * @param {Record<string, unknown>} row
- * @param {Record<string, unknown>} [opts]
+ * @param {{ siblings?: unknown, master?: Record<string, unknown>, mode?: 'full' | 'partial' }} [opts]
+ *   Use mode: 'partial' for PATCH/command bodies that omit identity fields (e.g. workOrderNo).
  * @returns {Promise<unknown[]>}
  */
 export async function assertValid(processCode, row, opts = {}) {

@@ -3,15 +3,22 @@ import ExcelJS from 'exceljs';
 
 const fmt = (v) => v == null ? '' : v;
 
+/**
+ * @param {string | Buffer} templatePathOrBuffer
+ */
 export async function injectReport(
-templatePath,
+templatePathOrBuffer,
 layout,
 header,
 rows,
 analysisRows)
 {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(templatePath);
+  if (Buffer.isBuffer(templatePathOrBuffer)) {
+    await wb.xlsx.load(templatePathOrBuffer);
+  } else {
+    await wb.xlsx.readFile(templatePathOrBuffer);
+  }
   const ws = wb.getWorksheet(layout.sheet) ?? wb.worksheets[0];
   if (!ws) throw new Error(`Sheet ${layout.sheet} not found in template`);
 
@@ -71,19 +78,15 @@ export async function buildBlankTemplate(layout) {
   ws.getCell('A2').value = layout.report;
   ws.getCell('A3').value = 'PROGRAMMATIC BLANK — replace with controlled plant template';
 
-  let colIdx = 1;
   const headerRow = Math.max(...(layout.table.headerRows ?? [4]));
   for (const field of Object.keys(layout.table.columns)) {
     const col = layout.table.columns[field];
     ws.getCell(`${col}${headerRow}`).value = field;
-    colIdx += 1;
   }
   if (layout.analysisTable) {
-    let c = 1;
     for (const field of Object.keys(layout.analysisTable.columns)) {
       const col = layout.analysisTable.columns[field];
       ws.getCell(`${col}${layout.analysisTable.dataStartRow - 1}`).value = field;
-      c += 1;
     }
   }
   const buf = await wb.xlsx.writeBuffer();

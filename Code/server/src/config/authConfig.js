@@ -70,7 +70,13 @@ export function initSuperTokens() {
   });
 
   initialized = true;
-  console.log('[auth] SuperTokens initialized');
+  if (config.apiBasePath !== '/api/auth') {
+    console.warn(
+      `[auth] apiBasePath is "${config.apiBasePath}" but the client expects "/api/auth". ` +
+        'Session refresh will 404 until API_BASE_PATH matches (Vite/Netlify keep the /api prefix).'
+    );
+  }
+  console.log(`[auth] SuperTokens initialized (apiBasePath=${config.apiBasePath})`);
   return true;
 }
 

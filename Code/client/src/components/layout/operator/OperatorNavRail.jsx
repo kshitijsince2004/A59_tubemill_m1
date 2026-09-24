@@ -1,12 +1,14 @@
+import { confirmDialog } from '../../ConfirmDialog';
+
 const FALLBACK_ITEMS = [
-  { id: 'orders', icon: '▣', label: 'Orders' },
+  { id: 'orders', icon: '▣', label: 'Work Order' },
   { id: 'capture', icon: '◎', label: 'Capture' },
   { id: 'history', icon: '▤', label: 'History' },
 ];
 
 /** Tube Mill modules include Parameters; pass via `items` from TubeMillRunConsole. */
 export const TM_NAV_FALLBACK = [
-  { id: 'orders', icon: '▣', label: 'Orders' },
+  { id: 'orders', icon: '▣', label: 'Work Order' },
   { id: 'capture', icon: '◎', label: 'Capture' },
   { id: 'parameters', icon: '▦', label: 'Parameters' },
   { id: 'history', icon: '▤', label: 'History' },
@@ -25,8 +27,16 @@ export default function OperatorNavRail({
     ? [...base.filter((i) => i.id !== 'admin'), { id: 'admin', icon: '⚙', label: 'Admin' }]
     : base;
 
-  function handleLogout() {
-    if (window.confirm('Sign out of the operator console?')) onLogout();
+  async function handleLogout() {
+    if (
+      await confirmDialog({
+        title: 'Sign out',
+        message: 'Sign out of the operator console?',
+        confirmLabel: 'Sign out',
+      })
+    ) {
+      onLogout();
+    }
   }
 
   return (
@@ -53,7 +63,7 @@ export default function OperatorNavRail({
           </button>
         ) : null}
       </div>
-      <button type="button" className="nav-rail__btn nav-rail__btn--logout" onClick={handleLogout}>
+      <button type="button" className="nav-rail__btn nav-rail__btn--logout" onClick={() => void handleLogout()}>
         <span className="nav-rail__icon">↩</span>
         Logout
       </button>

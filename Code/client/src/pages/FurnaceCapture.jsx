@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { furnaceApi } from '../api/processApi';
-import { erpApi } from '../api/erpApi';
 import { ZButton, ZInput, ZSelect, ZBadge, statusTone } from '../ui';
 import { getStoredUser, primaryRole } from '../lib/authStore';
 import { ErpWoSelect } from '../components/ErpWoSelect';
@@ -9,9 +8,12 @@ import StoppageDialog from '../components/StoppageDialog';
 import FurnaceBoard from '../components/furnace/FurnaceBoard';
 import FurnaceGasMatrix from '../components/furnace/FurnaceGasMatrix';
 import FurnaceConsumptionModal from '../components/furnace/FurnaceConsumptionModal';
+import FurnaceWorkOrderHub from '../components/furnace/FurnaceWorkOrderHub';
+import { ProductionActionRail } from '../components/layout/operator';
 import { downloadXlsx, stoppageApi } from '../api/plantApi';
 import { validateProcessForm } from '../lib/validateForm';
 import { getFurnaceMeta, machineCodeOf } from '../lib/furnaceMeta';
+import { formatElapsed } from '../lib/operatorClock';
 import ProcessStationShell from '../components/process/ProcessStationShell';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from 'react/jsx-runtime';
 
@@ -19,7 +21,7 @@ const ZONES = [1, 2, 3, 4, 5, 6];
 
 const FUR_NAV_ITEMS = [
   { id: 'furnaces', icon: '▣', label: 'Furnaces' },
-  { id: 'orders', icon: '☰', label: 'Orders' },
+  { id: 'orders', icon: '☰', label: 'Work Order' },
   { id: 'history', icon: '▤', label: 'History' },
   { id: 'gas', icon: '◇', label: 'Gas' },
 ];
@@ -123,20 +125,6 @@ function formatHistSize(size) {
   const len = size.lengthMm ?? size.length_mm ?? '';
   if (od === '' && thk === '' && len === '') return '—';
   return `${od}×${thk}×${len}`;
-}
-
-function parseOrderSize(size) {
-  if (!size) return null;
-  if (typeof size === 'object') return size;
-  if (typeof size === 'string') {
-    try {
-      const parsed = JSON.parse(size);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
 }
 
 function formatHistZones(lot) {
@@ -244,9 +232,10 @@ export default function FurnaceCapture({
   const [histTo, setHistTo] = useState('');
   const [histMode, setHistMode] = useState('lots'); // lots | gas | stop
   const [filterStopStatus, setFilterStopStatus] = useState('');
-  const [orderSearch, setOrderSearch] = useState('');
   const [stoppageDialogOpen, setStoppageDialogOpen] = useState(false);
   const [stoppageBusy, setStoppageBusy] = useState(false);
+  const [railBusy, setRailBusy] = useState(false);
+  const [railTick, setRailTick] = useState(0);
   const [consOpen, setConsOpen] = useState(false);
   const [consBusy, setConsBusy] = useState(false);
   const [consFurnace, setConsFurnace] = useState('');
@@ -310,22 +299,6 @@ export default function FurnaceCapture({
     queryFn: () => furnaceApi.stoppageHistory(stopHistQ),
     enabled: histMode === 'stop',
   });
-  const { data: erpOrders = [], isLoading: erpOrdersLoading } = useQuery({
-    queryKey: ['erp-orders'],
-    queryFn: () => erpApi.orders('Released'),
-    staleTime: 60_000,
-  });
-  const filteredErpOrders = useMemo(() => {
-    const q = orderSearch.trim().toLowerCase();
-    if (!q) return erpOrders;
-    return erpOrders.filter((o) => {
-      const wo = String(o.workOrderNo ?? '').toLowerCase();
-      const cust = String(o.customerCode ?? '').toLowerCase();
-      const grade = String(o.gradeCode ?? '').toLowerCase();
-      const lot = String(o.lotNo ?? '').toLowerCase();
-      return wo.includes(q) || cust.includes(q) || grade.includes(q) || lot.includes(q);
-    });
-  }, [erpOrders, orderSearch]);
   const { data: machines = [] } = useQuery({
     queryKey: ['furnace-machines'],
     queryFn: () => furnaceApi.machines(),
@@ -1071,167 +1044,9 @@ export default function FurnaceCapture({
     ],
   });
 
-  function applyErpOrderSelection(order) {
-    if (!order?.workOrderNo) return;
-    const wo = String(order.workOrderNo);
-    const size = parseOrderSize(order.size);
-    setField('workOrderNo', wo);
-    if (order.customerCode) setField('customerCode', String(order.customerCode));
-    if (order.gradeCode) setField('gradeCode', String(order.gradeCode));
-    if (size?.odMm != null || size?.od_mm != null) setField('sizeOd', String(size.odMm ?? size.od_mm));
-    if (size?.thkMm != null || size?.thk_mm != null) setField('sizeThk', String(size.thkMm ?? size.thk_mm));
-    if (size?.lengthMm != null || size?.length_mm != null)
-      setField('sizeLen', String(size.lengthMm ?? size.length_mm));
-    setOrderLocked(true);
-  }
-
-  const ordersContent = /*#__PURE__*/ _jsxs('section', {
-    className: 'panel furnace-orders',
-    children: [
-      /*#__PURE__*/ _jsxs('header', {
-        className: 'panel__header furnace-history__header',
-        children: [
-          /*#__PURE__*/ _jsx('span', { className: 'eyebrow', children: 'Furnace order intake' }),
-          form.workOrderNo
-            ? /*#__PURE__*/ _jsx(ZBadge, {
-                tone: statusTone('SUBMITTED'),
-                children: form.workOrderNo,
-              })
-            : null,
-        ],
-      }),
-      /*#__PURE__*/ _jsx('p', {
-        className: 'muted',
-        children:
-          'Select a released ERP work order from the list, then open the production form or the furnace board.',
-      }),
-      /*#__PURE__*/ _jsxs('div', {
-        className: 'furnace-history__toolbar',
-        children: [
-          /*#__PURE__*/ _jsxs('label', {
-            className: 'furnace-history__field furnace-history__field--grow',
-            children: [
-              /*#__PURE__*/ _jsx('span', { children: 'Search' }),
-              /*#__PURE__*/ _jsx(ZInput, {
-                placeholder: 'Filter WO, customer, grade…',
-                value: orderSearch,
-                onChange: (e) => setOrderSearch(e.target.value),
-              }),
-            ],
-          }),
-        ],
-      }),
-      /*#__PURE__*/ _jsx('div', {
-        className: 'furnace-history__table-wrap',
-        children: /*#__PURE__*/ _jsxs('table', {
-          className: 'furnace-hist-table',
-          children: [
-            /*#__PURE__*/ _jsx('thead', {
-              children: /*#__PURE__*/ _jsxs('tr', {
-                children: [
-                  /*#__PURE__*/ _jsx('th', { children: 'WO' }),
-                  /*#__PURE__*/ _jsx('th', { children: 'Customer' }),
-                  /*#__PURE__*/ _jsx('th', { children: 'Grade' }),
-                  /*#__PURE__*/ _jsx('th', { children: 'Size' }),
-                  /*#__PURE__*/ _jsx('th', { children: 'Lot' }),
-                ],
-              }),
-            }),
-            /*#__PURE__*/ _jsx('tbody', {
-              children: erpOrdersLoading
-                ? /*#__PURE__*/ _jsx('tr', {
-                    children: /*#__PURE__*/ _jsx('td', {
-                      colSpan: 5,
-                      className: 'empty-hint',
-                      children: 'Loading released orders…',
-                    }),
-                  })
-                : filteredErpOrders.length
-                  ? filteredErpOrders.map((o) => {
-                      const wo = String(o.workOrderNo ?? '');
-                      const size = parseOrderSize(o.size);
-                      return /*#__PURE__*/ _jsxs(
-                        'tr',
-                        {
-                          className:
-                            form.workOrderNo === wo
-                              ? 'furnace-hist-table__row is-selected'
-                              : 'furnace-hist-table__row',
-                          onClick: () => applyErpOrderSelection(o),
-                          children: [
-                            /*#__PURE__*/ _jsx('td', {
-                              className: 'font-mono',
-                              children: wo || '—',
-                            }),
-                            /*#__PURE__*/ _jsx('td', {
-                              children: String(o.customerCode ?? '—'),
-                            }),
-                            /*#__PURE__*/ _jsx('td', {
-                              children: String(o.gradeCode ?? '—'),
-                            }),
-                            /*#__PURE__*/ _jsx('td', {
-                              className: 'font-mono',
-                              children: formatHistSize(size),
-                            }),
-                            /*#__PURE__*/ _jsx('td', {
-                              className: 'font-mono',
-                              children: String(o.lotNo ?? '—'),
-                            }),
-                          ],
-                        },
-                        wo
-                      );
-                    })
-                  : /*#__PURE__*/ _jsx('tr', {
-                      children: /*#__PURE__*/ _jsx('td', {
-                        colSpan: 5,
-                        className: 'empty-hint',
-                        children: orderSearch.trim()
-                          ? 'No orders match this search.'
-                          : 'No released ERP orders.',
-                      }),
-                    }),
-            }),
-          ],
-        }),
-      }),
-      /*#__PURE__*/ _jsxs('div', {
-        className: 'process-capture__actions',
-        children: [
-          /*#__PURE__*/ _jsx(ZButton, {
-            variant: 'primary',
-            disabled: !isWritable || !form.workOrderNo,
-            onClick: () => {
-              setSelectedId(null);
-              setOrderLocked(!!form.workOrderNo);
-              setForm((f) => ({
-                ...emptyForm(selectedFurnace || f.furnaceCode),
-                furnaceCode: selectedFurnace || f.furnaceCode,
-                workOrderNo: f.workOrderNo,
-                customerCode: f.customerCode,
-                gradeCode: f.gradeCode,
-                sizeOd: f.sizeOd,
-                sizeThk: f.sizeThk,
-                sizeLen: f.sizeLen,
-              }));
-              setNav('capture');
-            },
-            children: 'New Production Run from selection',
-          }),
-          /*#__PURE__*/ _jsx(ZButton, {
-            variant: 'ghost',
-            onClick: () => setNav('furnaces'),
-            children: 'Open board',
-          }),
-          /*#__PURE__*/ _jsx(ZButton, {
-            variant: 'ghost',
-            disabled: !form.workOrderNo,
-            onClick: () => setNav('capture'),
-            children: 'Open production form',
-          }),
-        ],
-      }),
-    ],
+  const ordersContent = /*#__PURE__*/ _jsx(FurnaceWorkOrderHub, {
+    isWritable,
+    onMoveToProduction: onAssignedFromBoard,
   });
 
   const machineStatus = (() => {
@@ -1243,7 +1058,6 @@ export default function FurnaceCapture({
     return boardStatus || 'IDLE';
   })();
   const displayStatus = machineStatus;
-  const recordStatus = detail?.status ?? (selectedId ? 'DRAFT' : null);
   const batchGapView = deriveBatchGapStatus({ lengthMm: form.sizeLen, lotGapMm: form.lotGapMm });
   const soakSpec = recipe?.soakingSpecC;
   const canStart =
@@ -1263,9 +1077,54 @@ export default function FurnaceCapture({
   const canOpenStoppage =
     isWritable && !!selectedId && displayStatus === 'RUNNING' && !openStoppage;
   const canEndStoppage = isWritable && !!selectedId && displayStatus === 'STOPPAGE';
+  const isHeld = detail?.status === 'HOLD';
+  const captureActive = nav === 'capture' && !!selectedId;
+  const canHold =
+    canMachineHead && isWritable && !!selectedId && !detail?.productionEndedAt && !isHeld;
+
+  const actionPrimary = openStoppage
+    ? 'resume'
+    : canEnd
+      ? 'end'
+      : canStart
+        ? 'start'
+        : undefined;
+
+  useEffect(() => {
+    if (!captureActive) return undefined;
+    const id = window.setInterval(() => setRailTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [captureActive, openStoppage, detail?.productionStartedAt]);
+
+  const actionTimer = useMemo(() => {
+    void railTick;
+    if (openStoppage?.from_time || openStoppage?.fromTime) {
+      return formatElapsed(openStoppage.from_time || openStoppage.fromTime);
+    }
+    if (detail?.productionStartedAt && !detail?.productionEndedAt) {
+      return formatElapsed(detail.productionStartedAt);
+    }
+    return '00:00:00';
+  }, [railTick, openStoppage, detail?.productionStartedAt, detail?.productionEndedAt]);
+
+  const stoppageBanner = openStoppage
+    ? /*#__PURE__*/ _jsxs('div', {
+        className: 'status-rail__stoppage',
+        children: [
+          '■ Stoppage ',
+          String(openStoppage.stoppage_code ?? openStoppage.stoppageCode ?? 'UNCODED'),
+          openStoppage.reason ? ` / ${openStoppage.reason}` : '',
+          ' — since ',
+          new Date(
+            String(openStoppage.from_time || openStoppage.fromTime || Date.now())
+          ).toLocaleTimeString(),
+        ],
+      })
+    : undefined;
 
   async function handleStart() {
-    if (!selectedId) return;
+    if (!selectedId || !canStart) return;
+    setRailBusy(true);
     try {
       await furnaceApi.start(selectedId);
       invalidateFurnaceQueries();
@@ -1274,11 +1133,14 @@ export default function FurnaceCapture({
       setErr('');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Start failed');
+    } finally {
+      setRailBusy(false);
     }
   }
 
   async function handleEnd() {
-    if (!selectedId) return;
+    if (!selectedId || !canEnd) return;
+    setRailBusy(true);
     try {
       await furnaceApi.end(selectedId);
       invalidateFurnaceQueries();
@@ -1287,6 +1149,40 @@ export default function FurnaceCapture({
       setErr('');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'End failed');
+    } finally {
+      setRailBusy(false);
+    }
+  }
+
+  async function handleEndStoppage() {
+    if (!selectedId) return;
+    setStoppageBusy(true);
+    try {
+      await stoppageApi.close('FUR', selectedId);
+      setMsg('Stoppage ended — machine RUNNING');
+      setBoardStatus('RUNNING');
+      setStoppageDialogOpen(false);
+      setErr('');
+      invalidateFurnaceQueries();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'End stoppage failed');
+    } finally {
+      setStoppageBusy(false);
+    }
+  }
+
+  async function handleHold() {
+    if (!selectedId || !canHold) return;
+    setRailBusy(true);
+    try {
+      await furnaceApi.hold(selectedId);
+      invalidateFurnaceQueries();
+      setMsg('On hold');
+      setErr('');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Hold failed');
+    } finally {
+      setRailBusy(false);
     }
   }
 
@@ -1294,15 +1190,21 @@ export default function FurnaceCapture({
     if (!selectedId) return;
     setStoppageBusy(true);
     try {
-      await stoppageApi.open({
-        processCode: 'FUR',
-        sourceId: selectedId,
-        millCode: form.furnaceCode || selectedFurnace,
-        stoppageCode: body.stoppageCode,
-        reason: body.reason || body.remark || undefined,
-      });
-      setMsg('Stoppage opened');
-      setBoardStatus('STOPPAGE');
+      if (openStoppage) {
+        await stoppageApi.close('FUR', selectedId);
+        setMsg('Stoppage ended — machine RUNNING');
+        setBoardStatus('RUNNING');
+      } else {
+        await stoppageApi.open({
+          processCode: 'FUR',
+          sourceId: selectedId,
+          millCode: form.furnaceCode || selectedFurnace,
+          stoppageCode: body.stoppageCode,
+          reason: body.reason || body.remark || undefined,
+        });
+        setMsg('Stoppage opened');
+        setBoardStatus('STOPPAGE');
+      }
       setStoppageDialogOpen(false);
       setErr('');
       invalidateFurnaceQueries();
@@ -1334,7 +1236,8 @@ export default function FurnaceCapture({
       /*#__PURE__*/ _jsx(ProcessStationShell, {
         processId: processId,
         processLabel: 'Furnace',
-        machineCode: selectedFurnace || form.furnaceCode || 'RHF',
+        machineCode: selectedFurnace || form.furnaceCode || '',
+        crewSessionEnabled: Boolean(selectedFurnace || form.furnaceCode),
         processes: processes,
         onProcessChange: onProcessChange,
         onLogout: onLogout,
@@ -1350,7 +1253,41 @@ export default function FurnaceCapture({
           setConsOpen(true);
         },
         consumptionDisabled: !isWritable,
-        jobActive: !!selectedId && isWritable,
+        jobActive: !!selectedId && isWritable && nav === 'capture',
+        hold: isHeld,
+        onHold: canHold && nav === 'capture' ? () => void handleHold() : undefined,
+        holdDisabled: !canHold || railBusy,
+        onManualStop:
+          nav === 'capture' && (canOpenStoppage || openStoppage)
+            ? () => setStoppageDialogOpen(true)
+            : undefined,
+        manualStopDisabled:
+          (!canOpenStoppage && !openStoppage) || !isWritable || railBusy || stoppageBusy,
+        stoppageBanner: nav === 'capture' ? stoppageBanner : undefined,
+        actionRail:
+          !!selectedId && isWritable && nav === 'capture'
+            ? /*#__PURE__*/ _jsx(ProductionActionRail, {
+                jobId: form.chargeNo
+                  ? `Charge ${form.chargeNo}`
+                  : form.workOrderNo
+                    ? `WO ${form.workOrderNo}`
+                    : selectedFurnace || 'FUR',
+                timer: actionTimer,
+                statusLabel: displayStatus,
+                primary: actionPrimary,
+                busy: railBusy || stoppageBusy,
+                disabled: !isWritable,
+                hold: isHeld,
+                onStart: canStart ? () => void handleStart() : undefined,
+                onResume: openStoppage ? () => void handleEndStoppage() : undefined,
+                onEnd: canEnd ? () => void handleEnd() : undefined,
+                onStoppage:
+                  canOpenStoppage || openStoppage
+                    ? () => setStoppageDialogOpen(true)
+                    : undefined,
+                onHold: canHold ? () => void handleHold() : undefined,
+              })
+            : null,
         historyContent: historyContent,
         ordersContent: ordersContent,
         furnacesContent: furnacesContent,
@@ -1359,131 +1296,16 @@ export default function FurnaceCapture({
         initialNav: 'furnaces',
         nav: nav,
         onNavChange: setNav,
-        captureTitle: selectedFurnace
-          ? `${selectedFurnace} · ${furnaceMeta?.gasType ?? 'gas'} · ${displayStatus}`
-          : 'Production run',
-        children: /*#__PURE__*/ _jsxs('div', {
+        hideCaptureHeader: true,
+        children: [
+          /*#__PURE__*/ _jsxs('div', {
           className: 'process-capture process-capture--embedded',
           children: [
-            /*#__PURE__*/ _jsxs('header', {
+            /*#__PURE__*/ _jsx('header', {
               className: 'fur-run-header',
-              children: [
-                /*#__PURE__*/ _jsxs('div', {
-                  className: 'fur-run-header__top',
-                  children: [
-                    /*#__PURE__*/ _jsxs('div', {
-                      children: [
-                    /*#__PURE__*/ _jsx('h1', {
-                      children: selectedFurnace ? selectedFurnace : 'Production run',
-                    }),
-                    /*#__PURE__*/ _jsxs('div', {
-                      className: 'fur-run-header__pills',
-                      children: [
-                        /*#__PURE__*/ _jsx(ZBadge, { tone: 'idle', children: 'FUR' }),
-                        /*#__PURE__*/ _jsx(ZBadge, {
-                          tone: statusTone(displayStatus === 'COMPLETE' ? 'COMPLETED' : displayStatus),
-                          pulse: displayStatus === 'STOPPAGE' || displayStatus === 'RUNNING',
-                          children: displayStatus,
-                        }),
-                        furnaceMeta?.gasType
-                          ? /*#__PURE__*/ _jsx(ZBadge, { tone: 'info', children: furnaceMeta.gasType })
-                          : null,
-                        recordStatus
-                          ? /*#__PURE__*/ _jsx(ZBadge, {
-                              tone: statusTone(String(recordStatus)),
-                              children: `Record · ${recordStatus}`,
-                            })
-                          : null,
-                        /*#__PURE__*/ _jsx(ZBadge, { tone: 'idle', children: 'Source: Manual' }),
-                      ],
-                    }),
-                  ],
-                }),
-                /*#__PURE__*/ _jsxs('div', {
-                  className: 'process-capture__actions',
-                  children: [
-                    /*#__PURE__*/ _jsx(ZButton, {
-                      variant: 'ghost',
-                      onClick: () => setNav('furnaces'),
-                      children: 'Board',
-                    }),
-                    /*#__PURE__*/ _jsx(ZButton, {
-                      variant: 'ghost',
-                      onClick: () => setNav('orders'),
-                      children: 'Orders',
-                    }),
-                    canStart
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          variant: 'primary',
-                          onClick: () => void handleStart(),
-                          children: 'Start',
-                        })
-                      : null,
-                    canEnd
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          variant: 'primary',
-                          onClick: () => void handleEnd(),
-                          children: 'End',
-                        })
-                      : null,
-                    canOpenStoppage
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          onClick: () => setStoppageDialogOpen(true),
-                          children: 'Stoppage',
-                        })
-                      : null,
-                    canEndStoppage
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          onClick: async () => {
-                            if (!selectedId) return;
-                            setStoppageBusy(true);
-                            try {
-                              await stoppageApi.close('FUR', selectedId);
-                              setMsg('Stoppage ended — machine RUNNING');
-                              setBoardStatus('RUNNING');
-                              setErr('');
-                              invalidateFurnaceQueries();
-                            } catch (e) {
-                              setErr(e instanceof Error ? e.message : 'End stoppage failed');
-                            } finally {
-                              setStoppageBusy(false);
-                            }
-                          },
-                          children: 'End Stoppage',
-                        })
-                      : null,
-                    displayStatus === 'RUNNING' ||
-                    displayStatus === 'STOPPAGE' ||
-                    displayStatus === 'PREPARING'
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          disabled: !isWritable,
-                          onClick: save,
-                          children: 'Save',
-                        })
-                      : null,
-                    selectedId && (displayStatus === 'RUNNING' || displayStatus === 'STOPPAGE' || displayStatus === 'COMPLETE')
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          disabled: !isWritable,
-                          onClick: async () => {
-                            try {
-                              await furnaceApi.submit(selectedId);
-                              invalidateFurnaceQueries();
-                              setMsg('Submitted');
-                              setErr('');
-                            } catch (e) {
-                              setErr(e instanceof Error ? e.message : 'Submit failed');
-                            }
-                          },
-                          children: 'Submit',
-                        })
-                      : null,
-                  ],
-                }),
-              ],
-            }),
-            /*#__PURE__*/ _jsxs('dl', {
-              className: 'fur-run-header__meta',
-              children: [
+              children: /*#__PURE__*/ _jsxs('dl', {
+                className: 'fur-run-header__meta',
+                children: [
                 /*#__PURE__*/ _jsxs('div', {
                   children: [
                     /*#__PURE__*/ _jsx('dt', { children: 'Production Run' }),
@@ -1528,6 +1350,8 @@ export default function FurnaceCapture({
                 }),
               ],
             }),
+            }),
+            
             canMachineHead && selectedId
               ? /*#__PURE__*/ _jsxs('div', {
                   className: 'process-capture__actions fur-run-header__actions',
@@ -1537,19 +1361,13 @@ export default function FurnaceCapture({
                       style: { alignSelf: 'center', marginRight: 8 },
                       children: 'Review / Export',
                     }),
-                    /*#__PURE__*/ _jsx(ZButton, {
-                      disabled: !isWritable,
-                      onClick: async () => {
-                        try {
-                          await furnaceApi.hold(selectedId);
-                          invalidateFurnaceQueries();
-                          setMsg('On hold');
-                        } catch (e) {
-                          setErr(e instanceof Error ? e.message : 'Hold failed');
-                        }
-                      },
-                      children: 'Hold',
-                    }),
+                    canHold
+                      ? /*#__PURE__*/ _jsx(ZButton, {
+                          disabled: railBusy,
+                          onClick: () => void handleHold(),
+                          children: 'Hold',
+                        })
+                      : null,
                     /*#__PURE__*/ _jsx(ZButton, {
                       onClick: async () => {
                         try {
@@ -2003,6 +1821,40 @@ export default function FurnaceCapture({
                         }),
                       ],
                     }),
+                    /*#__PURE__*/ _jsxs('div', {
+                      className: 'process-capture__actions span-2',
+                      children: [
+                        /*#__PURE__*/ _jsx(ZButton, {
+                          variant: 'ghost',
+                          onClick: () => setNav('furnaces'),
+                          children: 'Back',
+                        }),
+                        selectedId &&
+                        (displayStatus === 'RUNNING' ||
+                          displayStatus === 'STOPPAGE' ||
+                          displayStatus === 'COMPLETE')
+                          ? /*#__PURE__*/ _jsx(ZButton, {
+                              variant: 'primary',
+                              disabled: !isWritable,
+                              onClick: async () => {
+                                try {
+                                  await furnaceApi.submit(selectedId);
+                                  invalidateFurnaceQueries();
+                                  setMsg('Submitted');
+                                  setErr('');
+                                } catch (e) {
+                                  setErr(e instanceof Error ? e.message : 'Submit failed');
+                                }
+                              },
+                              children: 'Submit',
+                            })
+                          : /*#__PURE__*/ _jsx(ZButton, {
+                              variant: 'primary',
+                              disabled: true,
+                              children: 'Submit',
+                            }),
+                      ],
+                    })
                   ],
                 }),
               ],
@@ -2012,15 +1864,14 @@ export default function FurnaceCapture({
         /*#__PURE__*/ _jsx(StoppageDialog, {
           open: stoppageDialogOpen,
           busy: stoppageBusy,
-          mode: 'open',
+          mode: openStoppage ? 'manage' : 'open',
           stoppageCodes,
           stoppages: lotStoppages,
-          openStoppage: null,
+          openStoppage: openStoppage,
           onCancel: () => setStoppageDialogOpen(false),
           onConfirm: (body) => void handleStoppageConfirm(body),
         }),
       ],
-    }),
       }),
       /*#__PURE__*/ _jsx(FurnaceConsumptionModal, {
         open: consOpen,

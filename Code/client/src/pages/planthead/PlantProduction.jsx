@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
 import { PlantShell } from '../../components/layout/planthead';
 import { plantReportsApi } from '../../api/plantReportsApi';
+import { TrendLine, BarSeries } from '../../components/charts';
+
+const WINDOWS = [7, 14, 30];
 
 export default function PlantProduction({ roleLabel, showAdmin, onLogout, firstFloorPath }) {
+  const [windowDays, setWindowDays] = useState(7);
   const [data, setData] = useState(null);
+  const [trend, setTrend] = useState(null);
+  const [stages, setStages] = useState(null);
   const [process, setProcess] = useState('');
   const [machine, setMachine] = useState('');
   const [drill, setDrill] = useState(null);
@@ -13,8 +19,10 @@ export default function PlantProduction({ roleLabel, showAdmin, onLogout, firstF
     let cancelled = false;
     (async () => {
       try {
-        const [prod, dd] = await Promise.all([
-          plantReportsApi.production(7),
+        const [prod, tr, st, dd] = await Promise.all([
+          plantReportsApi.production(windowDays),
+          plantReportsApi.trend(windowDays),
+          plantReportsApi.stages(windowDays),
           plantReportsApi.drilldown({
             metric: 'production',
             process: process || undefined,
@@ -23,6 +31,8 @@ export default function PlantProduction({ roleLabel, showAdmin, onLogout, firstF
         ]);
         if (!cancelled) {
           setData(prod);
+          setTrend(tr);
+          setStages(st);
           setDrill(dd);
           setError(null);
         }
@@ -33,12 +43,19 @@ export default function PlantProduction({ roleLabel, showAdmin, onLogout, firstF
     return () => {
       cancelled = true;
     };
-  }, [process, machine]);
+  }, [windowDays, process, machine]);
+
+  const series = trend?.series ?? [];
+  const stageRows = (stages?.stages ?? []).map((s) => ({
+    name: s.process,
+    mt: s.outputMt != null ? s.outputMt : 0,
+    count: s.count ?? 0,
+  }));
 
   return (
     <PlantShell
       title="Production"
-      subtitle="Output by process / machine — drill stays in plant context"
+      subtitle={`Output by process / machine — ${windowDays}-day window`}
       roleLabel={roleLabel}
       showAdmin={showAdmin}
       onLogout={onLogout}
@@ -46,6 +63,19 @@ export default function PlantProduction({ roleLabel, showAdmin, onLogout, firstF
     >
       <div className="ph-console">
         {error ? <div className="error-strip">{error}</div> : null}
+
+        <div className="ph-window-pills" role="group" aria-label="Window days">
+          {WINDOWS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={windowDays === d ? 'is-active' : ''}
+              onClick={() => setWindowDays(d)}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
 
         <div className="ph-kpi-strip">
           <div className="ph-kpi">
@@ -60,6 +90,41 @@ export default function PlantProduction({ roleLabel, showAdmin, onLogout, firstF
             <span className="ph-kpi__label">OEE (est.)</span>
             <strong>{data?.kpi?.oee ?? '—'}</strong>
           </div>
+        </div>
+
+        <div className="ph-graph-grid">
+          <TrendLine
+            className="chart-frame--wide"
+            title="Prime MT trend"
+            data={series}
+            xKey="date"
+            yKey="primeMt"
+            yLabel="Prime MT"
+            area
+            error={error}
+          />
+          <TrendLine
+            title="Yield %"
+            subtitle="Target 90%"
+            data={series}
+            xKey="date"
+            yKey="yieldPct"
+            yLabel="Yield %"
+            target={90}
+            error={error}
+          />
+          <BarSeries
+            title="Stage throughput"
+            subtitle="MT where available"
+            data={stageRows}
+            xKey="name"
+            series={[
+              { key: 'mt', label: 'Output MT' },
+              { key: 'count', label: 'Count' },
+            ]}
+            layout="vertical"
+            error={error}
+          />
         </div>
 
         <div className="ph-toolbar">
@@ -125,33 +190,6 @@ export default function PlantProduction({ roleLabel, showAdmin, onLogout, firstF
           </table>
           {!drill?.items?.length ? <p className="ph-empty">No rows for this drill level.</p> : null}
         </section>
-
-        {data?.daily ? (
-          <section className="ph-panel">
-            <h2 className="ph-panel__title">Today TM</h2>
-            <table className="ph-table">
-              <thead>
-                <tr>
-                  <th>Machine</th>
-                  <th>Prime MT</th>
-                  <th>Raw MT</th>
-                  <th>Yield %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data.daily.tm ?? []).map((r) => (
-                  <tr key={r.machineCode}>
-                    <td className="mono">{r.machineCode}</td>
-                    <td>{r.primeMt}</td>
-                    <td>{r.rawMt}</td>
-                    <td>{r.yieldPct}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!data.daily.tm?.length ? <p className="ph-empty">No TM output today.</p> : null}
-          </section>
-        ) : null}
       </div>
     </PlantShell>
   );

@@ -11,10 +11,16 @@
     "verify:rls": "npm run build && node dist/verify-rls.js",
     "verify:rbac": "npm run build && node dist/verify-rbac.js",
     "smoke:machine-head": "npm run build && node dist/smoke-machine-head.js",
+    "smoke:crew": "npm run build && node dist/smoke-crew.js",
+    "smoke:handover": "npm run build && node dist/smoke-handover.js",
     "smoke:plant-head": "npm run build && node dist/smoke-plant-head.js",
+    "smoke:dashboard-graphs": "npm run build && node dist/smoke-dashboard-graphs.js",
     "smoke:api-inventory": "npm run build && node dist/smoke-api-inventory.js",
     "verify:phases": "npm run build && node dist/verify-phases.js",
-    "verify:state-machine": "npm run build && node dist/verify-state-machine.js"
+    "verify:state-machine": "npm run build && node dist/verify-state-machine.js",
+    "check:migration-parity": "node scripts/check-migration-parity.mjs",
+    "smoke:unauth": "node scripts/smoke-unauth-401.mjs",
+    "cleanup:retention": "node scripts/cleanup-retention.mjs"
   },
   "dependencies": {
     "@a59/shared": "*",

@@ -99,6 +99,7 @@ import {
   requireAuth,
   requireProcessAccess,
   requireMachineHead,
+  requireMachineHeadOrOverride,
   requireAdmin,
   requireWritable,
   requireServiceToken,
@@ -108,6 +109,7 @@ import {
 import { stopCollectorForRun } from '../collector/CollectorRunner';
 import { publishSetupApproved } from '../events/DomainEvents';
 import { assertMachineApproval } from '../auth/machineAccessPolicy';
+import { assertValid, ValidationError } from '../services/ValidationGate';
 
 const router = Router();
 
@@ -120,8 +122,14 @@ function ok(res, data) {
   res.json({ data, errors: null });
 }
 
-function fail(res, status, message) {
-  res.status(status).json({ data: null, errors: [{ message }] });
+function fail(res, status, message, issues) {
+  res.status(status).json({ data: null, errors: issues ?? [{ message }] });
+}
+
+function failCaught(res, e, fallback) {
+  if (e instanceof ValidationError) return fail(res, 422, e.message, e.issues);
+  if (e?.status === 403 || e?.status === 401 || e?.status === 409) return fail(res, e.status, e.message);
+  fail(res, 400, e instanceof Error ? e.message : fallback);
 }
 
 /** Public — no auth (must be registered before requireAuth). */
@@ -153,7 +161,13 @@ router.get('/health', async (_req, res) => {
   });
 });
 
-router.get('/tubemill/session', authMiddleware, (req, res) => {
+router.get('/tubemill/session', authMiddleware, (req, res, next) => {
+  // Public probe only when header-role escape hatch is on; otherwise require auth (smoke 401).
+  if (!config.allowHeaderRole) {
+    return requireAuth(req, res, next);
+  }
+  next();
+}, (req, res) => {
   const authed = req;
   ok(res, {
     role: authed.appRole ?? config.staticAppRole,
@@ -209,7 +223,7 @@ router.get('/tubemill/queue', async (req, res) => {
 
 router.get('/tubemill/runs', async (req, res) => {
   try {
-    ok(res, await listRuns(req.query.mill ?? 'A-59', Number(req.query.limit ?? 50)));
+    ok(res, await listRuns(req.query.mill ?? 'A-59', Number(req.query.limit ?? 100)));
   } catch (err) {
     fail(res, 500, err instanceof Error ? err.message : 'List runs failed');
   }
@@ -253,9 +267,10 @@ router.post('/tubemill/params', requireWritable, withIdempotency, async (req, re
   const parsed = tmMillParamManualSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await saveMillParamManual(parsed.data.millCode ?? 'A-59', parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Param save failed');
+    failCaught(res, err, 'Param save failed');
   }
 });
 
@@ -298,9 +313,10 @@ router.post('/tubemill/setups', requireWritable, withIdempotency, async (req, re
   const parsed = tmMillSetupSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await createMillSetup(parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Setup create failed');
+    failCaught(res, err, 'Setup create failed');
   }
 });
 
@@ -308,10 +324,12 @@ router.post('/tubemill/runs', requireWritable, withIdempotency, async (req, res)
   const parsed = openRunSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(parsed.data.millCode, req.user);
     const run = await openRun(parsed.data.queueCardId, parsed.data.millCode, parsed.data.setupType);
     ok(res, run);
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Open run failed');
+    failCaught(res, err, 'Open run failed');
   }
 });
 
@@ -325,9 +343,10 @@ router.post('/tubemill/runs/:id/setup', requireWritable, withIdempotency, async 
   const parsed = tmSetupSchema.safeParse({ ...req.body, runId: paramId(req) });
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await saveSetup(paramId(req), parsed.data, req.appRole));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Setup save failed');
+    failCaught(res, err, 'Setup save failed');
   }
 });
 
@@ -335,6 +354,7 @@ router.post('/tubemill/runs/:id/first-off', requireMachineHead, withIdempotency,
   const parsed = tmFirstOffSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     const id = paramId(req);
     const run = await getRun(id);
     if (!run) return fail(res, 404, 'Run not found');
@@ -353,8 +373,7 @@ router.post('/tubemill/runs/:id/first-off', requireMachineHead, withIdempotency,
     });
     ok(res, await getRun(id));
   } catch (err) {
-    if (err?.status === 403 || err?.status === 401) return fail(res, err.status, err.message);
-    fail(res, 400, err instanceof Error ? err.message : 'First-off failed');
+    failCaught(res, err, 'First-off failed');
   }
 });
 
@@ -362,9 +381,10 @@ router.post('/tubemill/runs/:id/coils', requireWritable, withIdempotency, async 
   const parsed = tmCoilInputSchema.safeParse({ ...req.body, runId: paramId(req) });
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await addCoilInput(paramId(req), parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Coil add failed');
+    failCaught(res, err, 'Coil add failed');
   }
 });
 
@@ -372,9 +392,10 @@ router.post('/tubemill/runs/:id/bundles', requireWritable, withIdempotency, asyn
   const parsed = tmBundleSchema.safeParse({ ...req.body, runId: paramId(req) });
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await addBundle(paramId(req), parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Bundle add failed');
+    failCaught(res, err, 'Bundle add failed');
   }
 });
 
@@ -382,9 +403,10 @@ router.post('/tubemill/runs/:id/inspections', requireWritable, withIdempotency, 
   const parsed = tmOnlineInspectionSchema.safeParse({ ...req.body, runId: paramId(req) });
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await addOnlineInspection(paramId(req), parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Inspection failed');
+    failCaught(res, err, 'Inspection failed');
   }
 });
 
@@ -396,9 +418,10 @@ router.post('/tubemill/runs/:id/hold', requireWritable, withIdempotency, async (
   const parsed = tmHoldSchema.safeParse(req.body ?? {});
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await holdRun(paramId(req), parsed.data.remark));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Hold failed');
+    failCaught(res, err, 'Hold failed');
   }
 });
 
@@ -406,9 +429,10 @@ router.post('/tubemill/runs/:id/resume', requireWritable, withIdempotency, async
   const parsed = tmHoldSchema.safeParse(req.body ?? {});
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await resumeRun(paramId(req), parsed.data.remark));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Resume failed');
+    failCaught(res, err, 'Resume failed');
   }
 });
 
@@ -416,9 +440,10 @@ router.post('/tubemill/runs/:id/remark', requireWritable, withIdempotency, async
   const parsed = tmRemarkSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await appendRemark(paramId(req), parsed.data.remark));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Remark failed');
+    failCaught(res, err, 'Remark failed');
   }
 });
 
@@ -434,9 +459,10 @@ router.put('/tubemill/runs/:id/production', requireWritable, withIdempotency, as
   const parsed = tmProductionQuantitiesSchema.safeParse(req.body ?? {});
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await updateProductionQuantities(paramId(req), parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Production update failed');
+    failCaught(res, err, 'Production update failed');
   }
 });
 
@@ -444,9 +470,10 @@ router.post('/tubemill/runs/:id/end', requireWritable, withIdempotency, async (r
   const parsed = tmEndRunSchema.safeParse(req.body ?? {});
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await endProduction(paramId(req), parsed.data.remark));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'End failed');
+    failCaught(res, err, 'End failed');
   }
 });
 
@@ -462,9 +489,10 @@ router.post('/tubemill/runs/:id/manual-stop', requireWritable, withIdempotency, 
   const parsed = tmManualStopSchema.safeParse(req.body ?? {});
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await manualStop(paramId(req), parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Manual stop failed');
+    failCaught(res, err, 'Manual stop failed');
   }
 });
 
@@ -472,9 +500,10 @@ router.post('/tubemill/runs/:id/defects', requireWritable, withIdempotency, asyn
   const parsed = tmDefectSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await addDefect(paramId(req), parsed.data, req.appRole));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Defect failed');
+    failCaught(res, err, 'Defect failed');
   }
 });
 
@@ -486,9 +515,10 @@ router.post('/tubemill/runs/:id/arcweld', requireWritable, withIdempotency, asyn
   const parsed = tmArcWeldSchema.safeParse({ ...req.body, runId: paramId(req) });
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await addArcWeld(parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Arc weld failed');
+    failCaught(res, err, 'Arc weld failed');
   }
 });
 
@@ -500,9 +530,10 @@ router.post('/tubemill/runs/:id/edgemill', requireWritable, withIdempotency, asy
   const parsed = tmEdgeMillSchema.safeParse({ ...req.body, runId: paramId(req) });
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await addEdgeMill(paramId(req), parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Edge mill failed');
+    failCaught(res, err, 'Edge mill failed');
   }
 });
 
@@ -528,9 +559,10 @@ router.post('/tubemill/runs/:id/param-manual', requireWritable, withIdempotency,
   const parsed = tmParamManualSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await saveParamManual(paramId(req), parsed.data));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Param manual save failed');
+    failCaught(res, err, 'Param manual save failed');
   }
 });
 
@@ -554,7 +586,7 @@ router.post('/tubemill/runs/:id/submit', requireWritable, withIdempotency, async
   }
 });
 
-router.post('/tubemill/runs/:id/approve', requireMachineHead, withIdempotency, async (req, res) => {
+router.post('/tubemill/runs/:id/approve', requireMachineHeadOrOverride('APPROVE'), withIdempotency, async (req, res) => {
   try {
     const run = await getRun(paramId(req));
     if (!run) return fail(res, 404, 'Run not found');
@@ -628,9 +660,10 @@ router.post('/tubemill/stoppages/:id/code', requireWritable, withIdempotency, as
   const parsed = tmStoppageCodeSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, parsed.error.message);
   try {
+    await assertValid('TM', parsed.data, { mode: 'partial' });
     ok(res, await codeStoppage(paramId(req), parsed.data.stoppageCode, parsed.data.reason, parsed.data.remark));
   } catch (err) {
-    fail(res, 400, err instanceof Error ? err.message : 'Stoppage code failed');
+    failCaught(res, err, 'Stoppage code failed');
   }
 });
 

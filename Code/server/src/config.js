@@ -90,10 +90,15 @@ isProduction ? '' : 'http://localhost:3567');
 const authStrict =
 process.env.AUTH_STRICT === 'true' ||
 isProduction && process.env.AUTH_STRICT !== 'false';
-/** Dev-only: accept x-app-role when no SuperTokens session is present. */
+/**
+ * Dev-only: accept x-app-role when no SuperTokens session is present.
+ * Impossible in production / Netlify regardless of AUTH_ALLOW_HEADER_ROLE.
+ */
 const allowHeaderRole =
-process.env.AUTH_ALLOW_HEADER_ROLE === 'true' ||
-authMode === 'dev' && !isProduction && process.env.AUTH_ALLOW_HEADER_ROLE !== 'false';
+  !isProduction && (
+    process.env.AUTH_ALLOW_HEADER_ROLE === 'true' ||
+    authMode === 'dev' && process.env.AUTH_ALLOW_HEADER_ROLE !== 'false'
+  );
 
 export const config = {
   port: Number(process.env.PORT ?? 3001),
@@ -122,25 +127,34 @@ export const config = {
   allowHeaderRole,
   apiDomain: process.env.API_DOMAIN ?? `http://localhost:${process.env.PORT ?? 3001}`,
   websiteDomain: process.env.WEBSITE_DOMAIN ?? 'http://localhost:5173',
-  apiBasePath: process.env.API_BASE_PATH ?? '/auth',
+  // Must match client SuperTokens apiBasePath (/api/auth). Vite proxy forwards /api intact.
+  apiBasePath: process.env.API_BASE_PATH ?? '/api/auth',
   websiteBasePath: process.env.WEBSITE_BASE_PATH ?? '/auth'
 };
 
 export function assertProductionSecrets() {
-  const usingDefaultToken =
-  !process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token';
-  if (!config.isProduction || !usingDefaultToken) return;
+  if (!config.isProduction) return;
 
-  // Demo Netlify sites often paste the local .env (including dev-service-token).
-  // Warn instead of crashing the function with 502 when AUTH_MODE=dev.
-  if (authMode === 'dev' && isNetlify) {
-    console.warn(
-      '[config] SERVICE_TOKEN is still the local default. Set a non-default SERVICE_TOKEN in Netlify env for any shared URL.'
+  if (!config.superTokensConnectionUri) {
+    throw new Error(
+      'SUPERTOKENS_CONNECTION_URI is required when NODE_ENV=production or on Netlify'
     );
-    return;
   }
 
-  throw new Error('Set a non-default SERVICE_TOKEN when NODE_ENV=production or on Netlify');
+  const usingDefaultToken =
+    !process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token';
+  if (usingDefaultToken) {
+    throw new Error('Set a non-default SERVICE_TOKEN when NODE_ENV=production or on Netlify');
+  }
+
+  const usingDefaultDb =
+    /tubemill:tubemill@/i.test(config.databaseUrl) ||
+    isLocalDatabaseUrl(config.databaseUrl) && isNetlify;
+  if (usingDefaultDb) {
+    throw new Error(
+      'Set a non-default DATABASE_URL / NETLIFY_DB_URL when NODE_ENV=production or on Netlify'
+    );
+  }
 }
 
 export function assertCollectorModeSupported() {

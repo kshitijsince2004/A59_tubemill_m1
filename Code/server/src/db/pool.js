@@ -106,13 +106,28 @@ async function withTenant(fn) {
 }
 
 /**
+ * Run multiple statements atomically with a single tenant GUC (audit F6 / F15).
+ * @template T
+ * @param {(client: PoolClient) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+export async function withTransaction(fn) {
+  return withTenant(fn);
+}
+
+/**
  * @param {string} text
  * @param {unknown[]} [params]
+ * @param {PoolClient} [client] When provided, runs on that client (no nested BEGIN).
  * @returns {Promise<Record<string, unknown>[]>}
  */
-export async function query(text, params) {
-  return withTenant(async (client) => {
+export async function query(text, params, client) {
+  if (client) {
     const result = await client.query(text, params);
+    return result.rows;
+  }
+  return withTenant(async (c) => {
+    const result = await c.query(text, params);
     return result.rows;
   });
 }
@@ -120,9 +135,28 @@ export async function query(text, params) {
 /**
  * @param {string} text
  * @param {unknown[]} [params]
+ * @param {PoolClient} [client]
  * @returns {Promise<Record<string, unknown> | null>}
  */
-export async function queryOne(text, params) {
-  const rows = await query(text, params);
+export async function queryOne(text, params, client) {
+  const rows = await query(text, params, client);
   return rows[0] ?? null;
+}
+
+/**
+ * @param {PoolClient} client
+ * @param {string} text
+ * @param {unknown[]} [params]
+ */
+export async function queryOn(client, text, params) {
+  return query(text, params, client);
+}
+
+/**
+ * @param {PoolClient} client
+ * @param {string} text
+ * @param {unknown[]} [params]
+ */
+export async function queryOneOn(client, text, params) {
+  return queryOne(text, params, client);
 }

@@ -43,11 +43,29 @@ async function main() {
     detail: `status=${pending.status}`,
   });
 
-  const quality = await call('/api/quality/specs', { role: 'MACHINE_HEAD' });
+  const trend = await call('/api/reports/machine-head/trend?process=TM&windowDays=7', {
+    role: 'MACHINE_HEAD',
+  });
+  checks.push({
+    name: 'MH trend',
+    ok: trend.status === 200 && Array.isArray(trend.json?.data?.series),
+    detail: `status=${trend.status}`,
+  });
+
+  const quality = await call('/api/reports/machine-head/quality?process=FUR', {
+    role: 'MACHINE_HEAD',
+  });
+  checks.push({
+    name: 'MH quality FUR',
+    ok: quality.status === 200 && Array.isArray(quality.json?.data?.series),
+    detail: `status=${quality.status}`,
+  });
+
+  const qualitySpecs = await call('/api/quality/specs', { role: 'MACHINE_HEAD' });
   checks.push({
     name: 'quality specs',
-    ok: quality.status === 200,
-    detail: `status=${quality.status}`,
+    ok: qualitySpecs.status === 200,
+    detail: `status=${qualitySpecs.status}`,
   });
 
   const crew = await call('/api/machine-head/crew', { role: 'MACHINE_HEAD' });
@@ -79,7 +97,7 @@ async function main() {
   console.log('smoke:machine-head OK');
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((e) => {
+  console.error(e);
   process.exit(1);
 });

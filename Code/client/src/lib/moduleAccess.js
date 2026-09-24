@@ -2,7 +2,7 @@ import { hasProcessAccess } from './authStore';
 
 /** Tube Mill workstation modules — independent, not a sequential workflow. */
 export const TM_MODULES = [
-  { id: 'orders', label: 'Orders', icon: '▣', processCode: 'TM', minLevel: 'READ' },
+  { id: 'orders', label: 'Work Order', icon: '▣', processCode: 'TM', minLevel: 'READ' },
   { id: 'capture', label: 'Capture', icon: '◎', processCode: 'TM', minLevel: 'WRITE' },
   { id: 'parameters', label: 'Parameters', icon: '▦', processCode: 'TM', minLevel: 'READ' },
   { id: 'history', label: 'History', icon: '▤', processCode: 'TM', minLevel: 'READ' },

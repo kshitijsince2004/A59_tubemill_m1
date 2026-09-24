@@ -3,6 +3,17 @@ import { ZBadge, ZButton, ZInput, statusTone } from '../../ui';
 import { formatElapsed } from '../../lib/operatorClock';
 import { jsx as _jsx, jsxs as _jsxs } from 'react/jsx-runtime';
 
+/** Stage time fields are auto-calculated from swipe start/end — not editable. */
+const TIME_FIELD_KEYS = new Set([
+  'degreaseTimeMin',
+  'descaleTimeMin',
+  'phosphateTimeMin',
+  'neutralizerTimeMin',
+  'lubeTimeMin',
+  'dryerTimeMin',
+  'reactiveOilTimeMin',
+]);
+
 export const STP_MONITOR_STAGES = [
   {
     id: 'DEGREASE',
@@ -79,6 +90,116 @@ export const STP_MONITOR_STAGES = [
     ],
   },
 ];
+
+function StageIcon({ stageId, complete, na }) {
+  if (complete) {
+    return /*#__PURE__*/ _jsx('span', {
+      className: 'stp-stage-icon',
+      'aria-hidden': true,
+      children: '✓',
+    });
+  }
+  const common = {
+    viewBox: '0 0 24 24',
+    width: 18,
+    height: 18,
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.75,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    className: `stp-stage-icon${na ? ' is-na' : ''}`,
+    'aria-hidden': true,
+  };
+  switch (stageId) {
+    case 'DEGREASE':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('path', { d: 'M12 3c-2.5 4-6 6.5-6 10a6 6 0 0 0 12 0c0-3.5-3.5-6-6-10z' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M9.5 14h5' }),
+        ],
+      });
+    case 'PICKLE':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('path', { d: 'M9 3h6' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M10 3v4.5L6.5 18a3 3 0 0 0 2.7 4h5.6a3 3 0 0 0 2.7-4L14 7.5V3' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M8.5 14h7' }),
+        ],
+      });
+    case 'RINSE':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('path', { d: 'M12 3v6' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M8 9c0 3 1.8 6 4 9 2.2-3 4-6 4-9' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M7 21h10' }),
+        ],
+      });
+    case 'ACT':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('circle', { cx: 12, cy: 12, r: 3 }),
+          /*#__PURE__*/ _jsx('path', { d: 'M12 3v2M12 19v2M3 12h2M19 12h2' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4' }),
+        ],
+      });
+    case 'PHOS':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('rect', { x: 4, y: 8, width: 16, height: 12, rx: 2 }),
+          /*#__PURE__*/ _jsx('path', { d: 'M8 8V6a4 4 0 0 1 8 0v2' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M8 14h8M8 17h5' }),
+        ],
+      });
+    case 'NEUT':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('path', { d: 'M12 4v16' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M7 9h10' }),
+          /*#__PURE__*/ _jsx('circle', { cx: 12, cy: 17, r: 3 }),
+        ],
+      });
+    case 'LUBE':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('path', { d: 'M7 4h10v4H7z' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M9 8v3l-2 9h10l-2-9V8' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M10 14h4' }),
+        ],
+      });
+    case 'DRYER':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('path', { d: 'M4 14c2-3 4-3 6 0s4 3 6 0 4-3 6 0' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M4 18c2-3 4-3 6 0s4 3 6 0 4-3 6 0' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M8 6h8' }),
+        ],
+      });
+    case 'OIL':
+      return /*#__PURE__*/ _jsxs('svg', {
+        ...common,
+        children: [
+          /*#__PURE__*/ _jsx('path', { d: 'M8 10c0-3 2-6 4-7 2 1 4 4 4 7a4 4 0 0 1-8 0z' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M8 18h8' }),
+          /*#__PURE__*/ _jsx('path', { d: 'M10 18v3h4v-3' }),
+        ],
+      });
+    default:
+      return /*#__PURE__*/ _jsx('span', {
+        className: 'stp-stage-icon',
+        'aria-hidden': true,
+        children: '•',
+      });
+  }
+}
 
 function numOrUndef(v) {
   if (v === '' || v == null) return undefined;
@@ -168,6 +289,7 @@ export default function StpProcessMonitor({
   canStart = false,
   canEnd = false,
   onGoOrders,
+  onBack,
   onOpenStoppage,
   onEndStoppage,
   onOpenBath,
@@ -177,7 +299,7 @@ export default function StpProcessMonitor({
   onSaveReading,
   productionBlock = null,
   emptyTitle = 'Production run',
-  emptyHint = 'Select a production run from Order or History, then swipe to Start.',
+  emptyHint = 'Select a workorder, then Move to Production to begin capture.',
 }) {
   const activeStage = useMemo(
     () => stages.find((s) => s.status === 'ACTIVE') ?? null,
@@ -293,7 +415,10 @@ export default function StpProcessMonitor({
     const def = selectedDefRef.current;
     const patch = { remarks: remarksRef.current || undefined };
     if (def) {
-      for (const [k] of def.fields) patch[k] = numOrUndef(draftRef.current[k]);
+      for (const [k] of def.fields) {
+        if (TIME_FIELD_KEYS.has(k)) continue;
+        patch[k] = numOrUndef(draftRef.current[k]);
+      }
     }
     return patch;
   }
@@ -384,7 +509,7 @@ export default function StpProcessMonitor({
         /*#__PURE__*/ _jsx(ZButton, {
           variant: 'primary',
           onClick: onGoOrders,
-          children: 'Go to Orders',
+          children: 'Go to Workorder',
         }),
       ],
     });
@@ -408,8 +533,8 @@ export default function StpProcessMonitor({
                   /*#__PURE__*/ _jsx('button', {
                     type: 'button',
                     className: 'stp-run-console__back',
-                    onClick: onGoOrders,
-                    'aria-label': 'Back to orders',
+                    onClick: onBack || onGoOrders,
+                    'aria-label': 'Back to machine overview',
                     children: '←',
                   }),
                   /*#__PURE__*/ _jsx('h1', { children: woLabel }),
@@ -473,7 +598,11 @@ export default function StpProcessMonitor({
                     children: [
                       /*#__PURE__*/ _jsx('span', {
                         className: 'stp-run-console__node-circle',
-                        children: st === 'COMPLETE' ? '✓' : st === 'NA' ? '—' : i + 1,
+                        children: /*#__PURE__*/ _jsx(StageIcon, {
+                          stageId: def.id,
+                          complete: st === 'COMPLETE',
+                          na: st === 'NA',
+                        }),
                       }),
                       /*#__PURE__*/ _jsx('span', {
                         className: 'stp-run-console__node-label',
@@ -552,27 +681,43 @@ export default function StpProcessMonitor({
                   })
                 : /*#__PURE__*/ _jsx('div', {
                     className: 'stp-run-console__grid',
-                    children: selectedDef.fields.map(([key, label, unit]) =>
-                      /*#__PURE__*/ _jsxs(
+                    children: selectedDef.fields.map(([key, label, unit]) => {
+                      const isTime = TIME_FIELD_KEYS.has(key);
+                      const timeDisplay =
+                        selectedRow?.status === 'ACTIVE' && selectedRow.startedAt
+                          ? formatElapsed(selectedRow.startedAt)
+                          : selectedRow?.durationMin != null
+                            ? `${Number(selectedRow.durationMin).toFixed(1)}`
+                            : lot?.[key] != null && lot[key] !== ''
+                              ? String(lot[key])
+                              : draft[key] !== '' && draft[key] != null
+                                ? String(draft[key])
+                                : '—';
+                      return /*#__PURE__*/ _jsxs(
                         'label',
                         {
-                          className: 'stp-run-console__field',
+                          className: `stp-run-console__field${isTime ? ' is-readonly' : ''}`,
                           children: [
                             /*#__PURE__*/ _jsxs('span', {
-                              children: [label, unit ? ` (${unit})` : ''],
+                              children: [label, unit ? ` (${unit})` : '', isTime ? ' · auto' : ''],
                             }),
-                            /*#__PURE__*/ _jsx(ZInput, {
-                              type: 'number',
-                              step: 'any',
-                              disabled: !fieldsEditable,
-                              value: draft[key] ?? '',
-                              onChange: (e) => updateDraft(key, e.target.value),
-                            }),
+                            isTime
+                              ? /*#__PURE__*/ _jsx('div', {
+                                  className: 'stp-run-console__ro-value',
+                                  children: timeDisplay,
+                                })
+                              : /*#__PURE__*/ _jsx(ZInput, {
+                                  type: 'number',
+                                  step: 'any',
+                                  disabled: !fieldsEditable,
+                                  value: draft[key] ?? '',
+                                  onChange: (e) => updateDraft(key, e.target.value),
+                                }),
                           ],
                         },
                         key
-                      )
-                    ),
+                      );
+                    }),
                   }),
               /*#__PURE__*/ _jsxs('label', {
                 className: 'stp-run-console__remarks',

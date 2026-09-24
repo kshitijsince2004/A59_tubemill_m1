@@ -1,4 +1,4 @@
-import { query, queryOne } from '../db/pool';
+import { query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 
 
@@ -137,6 +137,17 @@ export async function publishFurMaterialLots(runId) {
   );
   if (!run) return 0;
 
+  // Carry coil lineage from the attached upstream lot (audit F30).
+  let coilTag = null;
+  let upstreamLotId = run.material_lot_id ?? null;
+  if (upstreamLotId) {
+    const upstream = await queryOne(
+      `SELECT id, coil_tag, lot_tag FROM txn.material_lot WHERE id = $1 AND tenant_id = $2`,
+      [upstreamLotId, config.tenantId]
+    );
+    coilTag = upstream?.coil_tag ?? upstream?.lot_tag ?? null;
+  }
+
   const tag = String(run.charge_no ?? `FUR-${runId.slice(0, 8)}`);
   const row = await queryOne(
     `INSERT INTO txn.material_lot (
@@ -145,6 +156,7 @@ export async function publishFurMaterialLots(runId) {
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,'AVAILABLE','FUR','FUR',$8)
      ON CONFLICT (tenant_id, lot_tag) DO UPDATE SET
        work_order_no = COALESCE(EXCLUDED.work_order_no, txn.material_lot.work_order_no),
+       coil_tag = COALESCE(EXCLUDED.coil_tag, txn.material_lot.coil_tag),
        customer_code = COALESCE(EXCLUDED.customer_code, txn.material_lot.customer_code),
        grade_code = COALESCE(EXCLUDED.grade_code, txn.material_lot.grade_code),
        size = COALESCE(EXCLUDED.size, txn.material_lot.size),
@@ -158,13 +170,28 @@ export async function publishFurMaterialLots(runId) {
       config.tenantId,
       run.work_order_no ?? null,
       tag,
-      null,
+      coilTag,
       run.customer_code ?? null,
       run.grade_code ?? null,
       JSON.stringify(run.size ?? {}),
       runId,
     ]
   );
+
+  // Link published charge lot back to the input coil lot for genealogy walks.
+  if (row && upstreamLotId) {
+    try {
+      await query(
+        `INSERT INTO txn.process_handoff (
+           tenant_id, material_lot_id, from_process, from_record_id, to_process, to_record_id, handed_by
+         ) VALUES ($1,$2,'TM',$3,'FUR',$4,NULL)`,
+        [config.tenantId, upstreamLotId, upstreamLotId, runId]
+      );
+    } catch {
+      /* duplicate or schema — coil_tag on charge lot is the critical fix */
+    }
+  }
+
   return row ? 1 : 0;
 }
 
@@ -175,6 +202,15 @@ export async function publishDrwMaterialLots(lotId) {
     [lotId, config.tenantId]
   );
   if (!lot) return 0;
+
+  let coilTag = null;
+  if (lot.material_lot_id) {
+    const upstream = await queryOne(
+      `SELECT coil_tag, lot_tag FROM txn.material_lot WHERE id = $1 AND tenant_id = $2`,
+      [lot.material_lot_id, config.tenantId]
+    );
+    coilTag = upstream?.coil_tag ?? null;
+  }
 
   const tag = String(lot.tag_no || lot.lot_no || `DRW-${lotId.slice(0, 8)}`);
   const size =
@@ -189,6 +225,7 @@ export async function publishDrwMaterialLots(lotId) {
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,'AVAILABLE','DRW','DRW',$8)
      ON CONFLICT (tenant_id, lot_tag) DO UPDATE SET
        work_order_no = COALESCE(EXCLUDED.work_order_no, txn.material_lot.work_order_no),
+       coil_tag = COALESCE(EXCLUDED.coil_tag, txn.material_lot.coil_tag),
        customer_code = COALESCE(EXCLUDED.customer_code, txn.material_lot.customer_code),
        grade_code = COALESCE(EXCLUDED.grade_code, txn.material_lot.grade_code),
        size = COALESCE(EXCLUDED.size, txn.material_lot.size),
@@ -202,7 +239,7 @@ export async function publishDrwMaterialLots(lotId) {
       config.tenantId,
       lot.work_order_no ?? null,
       tag,
-      null,
+      coilTag,
       lot.customer_code ?? null,
       lot.grade_code ?? null,
       JSON.stringify(size ?? {}),
@@ -249,6 +286,7 @@ export async function attachMaterialLot(input)
 
 
 
+
 {
   const lot = await queryOne(
     `SELECT * FROM txn.material_lot WHERE id = $1 AND tenant_id = $2`,
@@ -256,52 +294,69 @@ export async function attachMaterialLot(input)
   );
   if (!lot) throw new Error('Material lot not found');
 
-  const handoff = await queryOne(
-    `INSERT INTO txn.process_handoff (
-       tenant_id, material_lot_id, from_process, from_record_id, to_process, to_record_id, handed_by
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [
-    config.tenantId,
-    input.materialLotId,
-    input.fromProcess ?? lot.current_process ?? 'TM',
-    lot.origin_record_id ?? null,
-    input.toProcess,
-    input.toRecordId,
-    input.handedBy ?? null]
-
-  );
-
-  await query(
-    `UPDATE txn.material_lot SET current_process = $2, status = 'IN_PROCESS', updated_at = now()
-     WHERE id = $1`,
-    [input.materialLotId, input.toProcess]
-  );
-
-  const table =
-  input.toProcess === 'FUR' ?
-  'txn.prod_ann_run' :
-  input.toProcess === 'STP' ?
-  'txn.prod_stp_lot' :
-  input.toProcess === 'DRW' ?
-  'txn.prod_db_lot' :
-  input.toProcess === 'SWG' ?
-  'txn.prod_db_swage' :
-  null;
-  if (table) {
-    await query(
-      `UPDATE ${table} SET material_lot_id = $2, upstream_handoff_id = $3 WHERE id = $1 AND tenant_id = $4`,
-      [input.toRecordId, input.materialLotId, handoff.id, config.tenantId]
-    ).catch(async () => {
-      // swage may lack upstream_handoff_id
-      await query(`UPDATE ${table} SET material_lot_id = $2 WHERE id = $1 AND tenant_id = $3`, [
-      input.toRecordId,
+  return withTransaction(async (client) => {
+    const handoff = await queryOne(
+      `INSERT INTO txn.process_handoff (
+         tenant_id, material_lot_id, from_process, from_record_id, to_process, to_record_id, handed_by
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [
+      config.tenantId,
       input.materialLotId,
-      config.tenantId]
-      );
-    });
-  }
+      input.fromProcess ?? lot.current_process ?? 'TM',
+      lot.origin_record_id ?? null,
+      input.toProcess,
+      input.toRecordId,
+      input.handedBy ?? null],
+      client
+    );
 
-  return { handoffId: String(handoff.id) };
+    await query(
+      `UPDATE txn.material_lot SET current_process = $2, status = 'IN_PROCESS', updated_at = now()
+       WHERE id = $1`,
+      [input.materialLotId, input.toProcess],
+      client
+    );
+
+    const table =
+    input.toProcess === 'FUR' ?
+    'txn.prod_ann_run' :
+    input.toProcess === 'STP' ?
+    'txn.prod_stp_lot' :
+    input.toProcess === 'DRW' ?
+    'txn.prod_db_lot' :
+    input.toProcess === 'SWG' ?
+    'txn.prod_db_swage' :
+    null;
+    if (table) {
+      // SWG has no upstream_handoff_id; FUR/STP/DRW stamp both when present.
+      if (input.toProcess === 'SWG') {
+        await query(
+          `UPDATE ${table} SET material_lot_id = $2 WHERE id = $1 AND tenant_id = $3`,
+          [input.toRecordId, input.materialLotId, config.tenantId],
+          client
+        );
+      } else {
+        try {
+          await query('SAVEPOINT stamp_handoff', [], client);
+          await query(
+            `UPDATE ${table} SET material_lot_id = $2, upstream_handoff_id = $3 WHERE id = $1 AND tenant_id = $4`,
+            [input.toRecordId, input.materialLotId, handoff.id, config.tenantId],
+            client
+          );
+          await query('RELEASE SAVEPOINT stamp_handoff', [], client);
+        } catch {
+          await query('ROLLBACK TO SAVEPOINT stamp_handoff', [], client);
+          await query(
+            `UPDATE ${table} SET material_lot_id = $2 WHERE id = $1 AND tenant_id = $3`,
+            [input.toRecordId, input.materialLotId, config.tenantId],
+            client
+          );
+        }
+      }
+    }
+
+    return { handoffId: String(handoff.id) };
+  });
 }
 
 export async function getGenealogy(materialLotId) {

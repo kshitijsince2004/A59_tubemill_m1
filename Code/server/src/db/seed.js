@@ -92,6 +92,14 @@ async function seed() {
     await wipeTenantTable(client, 'master.fur_zone_recipe');
 
     await client.query(`DELETE FROM txn.tm_shift_log WHERE tenant_id = $1`, [tenantId]);
+    try {
+      await client.query(`DELETE FROM txn.session_crew WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM txn.machine_shift_session WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM txn.shift_log WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM master.machine_crew_roster WHERE tenant_id = $1`, [tenantId]);
+    } catch {
+      /* tables may not exist before migrate 032 */
+    }
     await client.query(`DELETE FROM plc.collector_health`);
     await client.query(`DELETE FROM plc.tag WHERE tenant_id = $1`, [tenantId]);
     await client.query(`DELETE FROM txn.idempotency_key`);
@@ -607,6 +615,28 @@ async function seed() {
           [userId, code, tenantId]
         );
       }
+    }
+
+    // Sample crew roster per A59 machine (soft-active register for MH + login capture)
+    try {
+      await client.query(`DELETE FROM txn.session_crew WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM txn.machine_shift_session WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM txn.shift_log WHERE tenant_id = $1`, [tenantId]);
+      await client.query(`DELETE FROM master.machine_crew_roster WHERE tenant_id = $1`, [tenantId]);
+      for (const m of machineRows.rows) {
+        const code = m.machine_code;
+        const label = m.label || code;
+        await client.query(
+          `INSERT INTO master.machine_crew_roster (
+             tenant_id, machine_code, role_label, person_name, shift_code, is_active
+           ) VALUES
+             ($1,$2,'Operator',$3,'A',true),
+             ($1,$2,'Helper',$4,'A',true)`,
+          [tenantId, code, `${label} Op`, `${label} Helper`]
+        );
+      }
+    } catch (e) {
+      console.warn('crew roster seed skipped:', e.message);
     }
 
     // All Released ERP WOs + lines (FUR/STP/DRW/TM dropdowns work without manual sync)

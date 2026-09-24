@@ -9,6 +9,8 @@ import {
   listPendingReview,
   getReviewItem,
   reviewAction,
+  getMachineHeadTrend,
+  getProcessQualitySeries,
 } from '../services/MhReviewService';
 
 const router = Router();
@@ -34,6 +36,39 @@ router.get('/reports/machine-head/pending', requireMachineHead, async (req, res)
     ok(res, await listPendingReview(req.user));
   } catch (e) {
     fail(res, 400, e instanceof Error ? e.message : 'Pending list failed');
+  }
+});
+
+// Static paths must register before /:process/:id
+router.get('/reports/machine-head/trend', requireMachineHead, async (req, res) => {
+  try {
+    ok(
+      res,
+      await getMachineHeadTrend(req.user, {
+        process: req.query.process,
+        machine: req.query.machine,
+        windowDays: req.query.windowDays,
+      })
+    );
+  } catch (e) {
+    if (e?.status) return fail(res, e.status, e.message);
+    fail(res, 400, e instanceof Error ? e.message : 'Trend failed');
+  }
+});
+
+router.get('/reports/machine-head/quality', requireMachineHead, async (req, res) => {
+  try {
+    ok(
+      res,
+      await getProcessQualitySeries(req.user, {
+        process: req.query.process,
+        machine: req.query.machine,
+        windowDays: req.query.windowDays,
+      })
+    );
+  } catch (e) {
+    if (e?.status) return fail(res, e.status, e.message);
+    fail(res, 400, e instanceof Error ? e.message : 'Quality series failed');
   }
 });
 

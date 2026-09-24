@@ -2,9 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import ErrorBoundary from './components/ErrorBoundary';
 import './styles.css';
 import './ui/ui.css';
-import { flushOutbox } from './offline/outbox';import { jsx as _jsx } from "react/jsx-runtime";
+import { flushOutbox } from './offline/outbox';
+import { jsx as _jsx } from "react/jsx-runtime";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,8 +37,10 @@ window.addEventListener('online', () => {
 
 createRoot(document.getElementById('root')).render(/*#__PURE__*/
   _jsx(StrictMode, { children: /*#__PURE__*/
-    _jsx(QueryClientProvider, { client: queryClient, children: /*#__PURE__*/
-      _jsx(App, {}) }
-    ) }
-  )
+    _jsx(ErrorBoundary, { children: /*#__PURE__*/
+      _jsx(QueryClientProvider, { client: queryClient, children: /*#__PURE__*/
+        _jsx(App, {}) }
+      )
+    } )
+  })
 );

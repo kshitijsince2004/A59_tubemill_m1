@@ -22,7 +22,10 @@ export default function OperatorShell({
   onProcessChange,
   onSetup,
   setupDisabled,
+  setupLabel,
   onReadings,
+  onHold,
+  holdDisabled,
   onManualStop,
   manualStopDisabled,
   onEndShift,
@@ -61,7 +64,10 @@ export default function OperatorShell({
           onProcessChange={onProcessChange}
           onSetup={onSetup}
           setupDisabled={setupDisabled}
+          setupLabel={setupLabel}
           onReadings={onReadings}
+          onHold={onHold}
+          holdDisabled={holdDisabled}
           onManualStop={onManualStop}
           manualStopDisabled={manualStopDisabled}
           onEndShift={onEndShift}

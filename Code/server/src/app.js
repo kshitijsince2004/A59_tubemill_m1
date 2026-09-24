@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { config } from './config';
@@ -21,11 +22,32 @@ import masterDataRoutes from './routes/masterDataRoutes';
 import validationRulesRoutes from './routes/validationRulesRoutes';
 import qualityRoutes from './routes/qualityRoutes';
 import machineCrewRoutes from './routes/machineCrewRoutes';
+import crewRoutes from './routes/crewRoutes';
+import machineHandoverRoutes from './routes/machineHandoverRoutes';
+import traceabilityRoutes from './routes/traceabilityRoutes';
 
+const CORS_ALLOWED_HEADERS = [
+  'content-type',
+  'authorization',
+  'idempotency-key',
+  'x-app-role',
+  'x-demo-role',
+  'x-service-token',
+  'x-override-token',
+  'x-request-id',
+  'st-auth-mode',
+  'fdi-version',
+  'rid',
+];
 
-
-
-
+const CORS_EXPOSED_HEADERS = [
+  'front-token',
+  'st-access-token',
+  'st-refresh-token',
+  'anti-csrf',
+  'id-refresh-token',
+  'x-request-id',
+];
 
 export function createApp(options = {}) {
   const { serveClient = false } = options;
@@ -37,87 +59,82 @@ export function createApp(options = {}) {
     app.use(
       cors({
         origin: true,
-        allowedHeaders: [
-        'content-type',
-        'authorization',
-        'idempotency-key',
-        'x-app-role',
-        'x-demo-role',
-        'x-service-token',
-        'st-auth-mode',
-        'fdi-version',
-        'rid'],
-
-        exposedHeaders: [
-        'front-token',
-        'st-access-token',
-        'st-refresh-token',
-        'anti-csrf',
-        'id-refresh-token'],
-
-        credentials: true
+        allowedHeaders: CORS_ALLOWED_HEADERS,
+        exposedHeaders: CORS_EXPOSED_HEADERS,
+        credentials: true,
       })
     );
   } else if (config.corsOrigin && config.corsOrigin !== 'same-origin') {
     app.use(
       cors({
         origin: config.corsOrigin.split(',').map((s) => s.trim()),
-        allowedHeaders: [
-        'content-type',
-        'authorization',
-        'idempotency-key',
-        'x-app-role',
-        'x-demo-role',
-        'x-service-token',
-        'st-auth-mode',
-        'fdi-version',
-        'rid'],
-
-        exposedHeaders: [
-        'front-token',
-        'st-access-token',
-        'st-refresh-token',
-        'anti-csrf',
-        'id-refresh-token'],
-
-        credentials: true
+        allowedHeaders: CORS_ALLOWED_HEADERS,
+        exposedHeaders: CORS_EXPOSED_HEADERS,
+        credentials: true,
       })
     );
   }
 
   app.use(express.json());
 
+  // Observability (F18): request id + structured access log
+  app.use((req, res, next) => {
+    const incoming = req.header('x-request-id');
+    const requestId =
+      incoming && String(incoming).trim() ? String(incoming).trim() : crypto.randomUUID();
+    req.requestId = requestId;
+    res.setHeader('x-request-id', requestId);
+    const started = Date.now();
+    res.on('finish', () => {
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          requestId,
+          method: req.method,
+          path: req.originalUrl || req.url,
+          status: res.statusCode,
+          ms: Date.now() - started,
+        })
+      );
+    });
+    next();
+  });
+
   if (stEnabled) {
     app.use(getSuperTokensMiddleware());
   }
 
-  app.use(authRoutes);
+  // Custom auth helpers under /api (client always uses /api). SuperTokens recipe
+  // paths live at apiBasePath (/api/auth) via ST middleware above — keep root free.
   app.use('/api', authRoutes);
-  app.use(userRoutes);
   app.use('/api', userRoutes);
 
-  // Dev (Vite proxy strips /api) and prod/Netlify (client calls /api/…)
+  // Process / domain routers: /api only (F23). Vite proxy forwards /api intact.
   const mounts = [
-  tubeMillRoutes,
-  furnaceRoutes,
-  stpRoutes,
-  drawBenchRoutes,
-  swageRoutes,
-  genealogyRoutes,
-  erpRoutes,
-  mhReviewRoutes,
-  reportRoutes,
-  auditRoutes,
-  plantExportRoutes,
-  qualityRoutes,
-  machineCrewRoutes,
-  masterDataRoutes,
-  validationRulesRoutes];
+    tubeMillRoutes,
+    furnaceRoutes,
+    stpRoutes,
+    drawBenchRoutes,
+    swageRoutes,
+    genealogyRoutes,
+    erpRoutes,
+    mhReviewRoutes,
+    reportRoutes,
+    auditRoutes,
+    plantExportRoutes,
+    qualityRoutes,
+    machineCrewRoutes,
+    crewRoutes,
+    masterDataRoutes,
+    validationRulesRoutes,
+    traceabilityRoutes,
+  ];
 
   for (const r of mounts) {
-    app.use(r);
     app.use('/api', r);
   }
+
+  app.use('/api/machines/handover', machineHandoverRoutes);
 
   if (stEnabled) {
     app.use(getSuperTokensErrorHandler());
@@ -131,29 +148,11 @@ export function createApp(options = {}) {
       app.use(express.static(dist));
       app.get('*', (req, res) => {
         if (
-        req.path.startsWith('/api') ||
-        req.path.startsWith('/auth') ||
-        req.path.startsWith('/users') ||
-        req.path.startsWith('/machines') ||
-        req.path.startsWith('/tubemill') ||
-        req.path.startsWith('/furnace') ||
-        req.path.startsWith('/stp') ||
-        req.path.startsWith('/drawbench') ||
-        req.path.startsWith('/swage') ||
-        req.path.startsWith('/genealogy') ||
-        req.path.startsWith('/stoppages') ||
-        req.path.startsWith('/erp') ||
-        req.path.startsWith('/reports') ||
-        req.path.startsWith('/audit') ||
-        req.path.startsWith('/plant') ||
-        req.path.startsWith('/quality') ||
-        req.path.startsWith('/machine-head') ||
-        req.path.startsWith('/master-data') ||
-        req.path.startsWith('/validation-rules') ||
-        req.path.startsWith('/internal') ||
-        req.path === '/health')
-        {
-          res.status(404).json({ data: null, errors: [{ message: 'Not found' }] });
+          req.path.startsWith('/api') ||
+          req.path.startsWith('/auth') ||
+          req.path === '/health'
+        ) {
+          res.status(404).json({ data: null, errors: [{ message: 'Unknown API route' }] });
           return;
         }
         res.sendFile(path.join(dist, 'index.html'));

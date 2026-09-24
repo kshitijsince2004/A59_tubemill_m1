@@ -27,6 +27,9 @@ import {
 } from '../lib/moduleAccess';
 import { signOutSession } from '../lib/supertokens';
 import { useIstClock, formatElapsed } from '../lib/operatorClock';
+import CrewCaptureModal, { useCrewSession } from '../components/CrewCaptureModal';
+import { HandoverAcceptGate } from '../components/HandoverAcceptGate';
+import { useNavigate } from 'react-router-dom';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from 'react/jsx-runtime';
 
 function ErpAdminStatus() {
@@ -94,8 +97,11 @@ function millStatusFromRun(run, openStoppage) {
   return uiHeaderState(run.runState);
 }
 
-function actionPrimaryFor(runState) {
-  if (runState === 'IDLE') return 'start';
+function actionPrimaryFor(run) {
+  if (!run) return 'none';
+  if (run.holdStatus === 'HELD') return 'none';
+  const runState = run.runState;
+  if (runState === 'IDLE' || runState === 'SETUP') return 'start';
   if (runState === 'STOPPAGE') return 'resume';
   if (runState === 'RUNNING') return 'end';
   return 'none';
@@ -110,6 +116,7 @@ export default function TubeMillRunConsole({
   onAdmin
 }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const clock = useIstClock();
   const storedUser = getStoredUser();
   const navItems = useMemo(() => {
@@ -142,6 +149,9 @@ export default function TubeMillRunConsole({
   const [msg, setMsg] = useState('');
   const [, setTick] = useState(0);
 
+  const millCode = 'A-59';
+  const crew = useCrewSession(millCode, { shiftCode: 'A', enabled: true });
+
   useEffect(() => {
     const id = window.setInterval(() => setTick((t) => t + 1), 1000);
     return () => window.clearInterval(id);
@@ -160,12 +170,6 @@ export default function TubeMillRunConsole({
     queryKey: ['queue'],
     queryFn: () => tubemillApi.getQueue('A-59'),
     refetchInterval: 10_000
-  });
-
-  const { data: history = [] } = useQuery({
-    queryKey: ['runs-history'],
-    queryFn: () => tubemillApi.listRuns('A-59'),
-    enabled: nav === 'history'
   });
 
   const hold = run?.holdStatus === 'HELD';
@@ -225,7 +229,7 @@ export default function TubeMillRunConsole({
   const millStatus = millStatusFromRun(run, openStoppage);
   const jobActive =
     !!run && nav === 'capture' && run.status === 'DRAFT' && run.runState !== 'RUN_COMPLETE';
-  const actionPrimary = actionPrimaryFor(run?.runState);
+  const actionPrimary = actionPrimaryFor(run);
   const actionTimer =
     run?.runState === 'RUNNING' && run.timeFrom
       ? formatElapsed(run.timeFrom)
@@ -394,7 +398,10 @@ export default function TubeMillRunConsole({
 
   return _jsxs(_Fragment, {
     children: [
-      _jsxs(OperatorShell, {
+      _jsx(HandoverAcceptGate, {
+        machineCode: millCode,
+        onHandoverAccepted: () => void crew.refresh(),
+        children: _jsxs(OperatorShell, {
         nav,
         onNavChange: handleNavChange,
         showAdmin: showAdmin || canAdmin,
@@ -428,11 +435,8 @@ export default function TubeMillRunConsole({
           !['RUNNING', 'STOPPAGE'].includes(run.runState) ||
           nav !== 'capture',
         onEndShift: () =>
-          void tubemillApi
-            .shiftBoundary('B')
-            .then(() => setMsg('Shift ended — open runs carried forward'))
-            .catch((e) => setError(e instanceof Error ? e.message : 'Shift failed')),
-        endShiftDisabled: !canMachineHead,
+          navigate(`/handover?machine=${encodeURIComponent(millCode)}&process=TM`),
+        endShiftDisabled: false,
         stoppageBanner: openStoppage
           ? _jsxs('div', {
               className: 'status-rail__stoppage',
@@ -449,7 +453,9 @@ export default function TubeMillRunConsole({
         actionRail:
           jobActive && run
             ? _jsx(ProductionActionRail, {
-                jobId: run.runNo,
+                jobId: run.workOrderNo
+                  ? `WO ${run.workOrderNo}`
+                  : `Run ${run.runNo}`,
                 timer: actionTimer,
                 statusLabel: actionStatusLabel,
                 primary: actionPrimary,
@@ -497,6 +503,8 @@ export default function TubeMillRunConsole({
           nav === 'capture' &&
             !run &&
             _jsx(LiveStatusPage, {
+              millCode: 'A-59',
+              onGoOrders: () => setNav('orders'),
               onOpenRun: (id) =>
                 void tubemillApi.getRun(id).then((r) => {
                   setRun(r);
@@ -506,10 +514,22 @@ export default function TubeMillRunConsole({
 
           nav === 'history' &&
             _jsx(HistoryModule, {
-              history,
+              millCode: 'A-59',
               onOpenRun: (h) => {
-                setRun(h);
-                setNav('capture');
+                const id = h?.id;
+                if (!id) return;
+                setError('');
+                setBusy(true);
+                void tubemillApi
+                  .getRun(id)
+                  .then((r) => {
+                    setRun(r);
+                    routeAfterLoad(r);
+                  })
+                  .catch((e) => {
+                    setError(e instanceof Error ? e.message : 'Failed to load run');
+                  })
+                  .finally(() => setBusy(false));
               }
             }),
 
@@ -630,7 +650,8 @@ export default function TubeMillRunConsole({
           nav === 'capture' &&
             run &&
             _jsx(CaptureWorkspace, {
-              title: 'Production Console',
+              title: 'Capture',
+              workOrderNo: run.workOrderNo,
               runNo: run.runNo,
               machineCode: 'A-59',
               runState: uiHeaderState(run.runState),
@@ -700,6 +721,7 @@ export default function TubeMillRunConsole({
               })
             })
         ]
+      })
       }),
 
       _jsx(StoppageDialog, {
@@ -755,7 +777,44 @@ export default function TubeMillRunConsole({
             .catch((e) => setError(e instanceof Error ? e.message : 'End failed'))
             .finally(() => setBusy(false));
         }
-      })
+      }),
+
+      _jsx(CrewCaptureModal, {
+        open: crew.showModal,
+        machineCode: millCode,
+        sessionId: crew.sessionId,
+        onClose: () => crew.setShowModal(false),
+        onAttached: () => void crew.refresh()
+      }),
+
+      crew.conflictCode === 'ACTIVE_SESSION_CONFLICT'
+        ? _jsxs('div', {
+            style: {
+              position: 'fixed',
+              inset: 0,
+              zIndex: 190,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+              background: 'rgba(248,250,252,0.92)',
+              padding: 24,
+            },
+            children: [
+              _jsx('p', {
+                style: { textAlign: 'center', maxWidth: 420, margin: 0 },
+                children:
+                  'Another operator already holds the active session on A-59. Ask them to end shift / hand over, or sign in as that operator.',
+              }),
+              _jsx(ZButton, {
+                variant: 'secondary',
+                onClick: () => void crew.refresh(),
+                children: 'Check again',
+              }),
+            ],
+          })
+        : null
     ]
   });
 }

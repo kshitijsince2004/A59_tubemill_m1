@@ -14,7 +14,11 @@ const FILTERS = [
   { id: 'IDLE', label: 'Idle' },
 ];
 
-export default function DrawBenchBoard({ onOpenBench, onAssigned }) {
+/**
+ * Capture landing: per-bench cards.
+ * Board Load is WO→bench (bench fixed); WO hub Load is bench→WO via DrawBenchLoadDialog.
+ */
+export default function DrawBenchBoard({ onOpenBench, onAssigned, onFocusBench }) {
   const qc = useQueryClient();
   const [filter, setFilter] = useState('ALL');
   const [assignTarget, setAssignTarget] = useState(null);
@@ -54,24 +58,33 @@ export default function DrawBenchBoard({ onOpenBench, onAssigned }) {
     try {
       const lot = await drawBenchApi.assign(assignTarget.benchCode, {
         workOrderNo: assignWo,
+        drawPass: '1ST',
       });
+      const bench = assignTarget.benchCode;
       setAssignTarget(null);
       setAssignWo('');
       await qc.invalidateQueries({ queryKey: ['drw-board'] });
       await qc.invalidateQueries({ queryKey: ['drw-lots'] });
-      onAssigned?.(lot, assignTarget.benchCode);
+      onAssigned?.(lot, bench);
     } catch (e) {
-      setAssignErr(e instanceof Error ? e.message : 'Assign failed');
+      setAssignErr(e instanceof Error ? e.message : 'Load failed');
     } finally {
       setAssigning(false);
     }
   }
 
+  function beginAssign(row) {
+    setAssignTarget(row);
+    setAssignWo('');
+    setAssignErr('');
+    onFocusBench?.(row.benchCode);
+  }
+
   return (
     <div className="db-board">
       <ZPageHeader
-        title="Draw Bench board"
-        subtitle="Select a bench or assign a released work order"
+        title="Draw Bench"
+        subtitle="All benches — open production or load an idle machine"
         actions={
           <ZButton variant="ghost" disabled={isFetching} onClick={() => void refetch()}>
             {isFetching ? 'Refreshing…' : 'Refresh'}
@@ -82,7 +95,9 @@ export default function DrawBenchBoard({ onOpenBench, onAssigned }) {
       <ZFilterPills pills={pills} value={filter} onChange={setFilter} />
 
       {error ? (
-        <p className="banner banner--error">{error instanceof Error ? error.message : 'Board load failed'}</p>
+        <p className="banner banner--error">
+          {error instanceof Error ? error.message : 'Board load failed'}
+        </p>
       ) : null}
 
       <div className="db-board__grid">
@@ -91,12 +106,11 @@ export default function DrawBenchBoard({ onOpenBench, onAssigned }) {
             key={row.benchCode}
             row={row}
             assigning={assigning && assignTarget?.benchCode === row.benchCode}
-            onOpen={(r) => onOpenBench?.(r)}
-            onAssign={(r) => {
-              setAssignTarget(r);
-              setAssignWo('');
-              setAssignErr('');
+            onOpen={(r) => {
+              onFocusBench?.(r.benchCode);
+              onOpenBench?.(r);
             }}
+            onAssign={beginAssign}
           />
         ))}
       </div>
@@ -104,21 +118,38 @@ export default function DrawBenchBoard({ onOpenBench, onAssigned }) {
       {!filtered.length ? <p className="empty-hint">No draw benches match this filter.</p> : null}
 
       {assignTarget ? (
-        <div className="furnace-assign-dialog" role="dialog" aria-label={`Assign order to ${assignTarget.benchCode}`}>
+        <div
+          className="furnace-assign-dialog"
+          role="dialog"
+          aria-label={`Load order on ${assignTarget.benchCode}`}
+        >
           <div className="furnace-assign-dialog__panel">
-            <h3>{`Assign order → ${assignTarget.benchCode}`}</h3>
-            <p className="muted">Creates a DRAFT production lot on this bench from a released ERP work order.</p>
+            <h3>{`Load order → ${assignTarget.benchCode}`}</h3>
+            <p className="muted">
+              Creates a DRAFT production lot on this bench from a released ERP work order.
+            </p>
             <label>
               Work order
               <ErpWoSelect value={assignWo} onChange={(wo) => setAssignWo(wo)} />
             </label>
             {assignErr ? <p className="banner banner--error">{assignErr}</p> : null}
             <div className="btn-row">
-              <ZButton variant="ghost" disabled={assigning} onClick={() => setAssignTarget(null)}>
+              <ZButton
+                variant="ghost"
+                disabled={assigning}
+                onClick={() => {
+                  setAssignTarget(null);
+                  setAssignErr('');
+                }}
+              >
                 Cancel
               </ZButton>
-              <ZButton variant="primary" disabled={assigning || !assignWo} onClick={() => void confirmAssign()}>
-                {assigning ? 'Assigning…' : 'Assign & open'}
+              <ZButton
+                variant="primary"
+                disabled={assigning || !assignWo}
+                onClick={() => void confirmAssign()}
+              >
+                {assigning ? 'Loading…' : 'Confirm Load'}
               </ZButton>
             </div>
           </div>

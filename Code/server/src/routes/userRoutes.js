@@ -130,9 +130,31 @@ router.put('/users/:id/machine-access', manageUsers, async (req, res) => {
   }
 });
 
-router.get('/machines/master', requireRole('ADMIN', 'PLANT_HEAD', 'MACHINE_HEAD'), async (_req, res) => {
+router.get('/machines/master', requireRole('ADMIN', 'PLANT_HEAD', 'MACHINE_HEAD'), async (req, res) => {
   try {
-    const machines = await listMachines();
+    let machines = await listMachines();
+    const user = req.user;
+    if (
+      user &&
+      !user.roles?.includes('ADMIN') &&
+      !user.roles?.includes('PLANT_HEAD')
+    ) {
+      const machineCodes = new Set(
+        (user.machineAccess ?? []).map((g) => g.machineCode).filter(Boolean)
+      );
+      const processCodes = new Set(
+        (user.processAccess ?? [])
+          .filter((g) => {
+            const level = String(g.level || '').toUpperCase();
+            return level === 'WRITE' || level === 'APPROVE' || level === 'MANAGE';
+          })
+          .map((g) => g.processCode)
+          .filter(Boolean)
+      );
+      machines = machines.filter(
+        (m) => machineCodes.has(m.machineCode) || processCodes.has(m.processCode)
+      );
+    }
     res.json({ data: machines, errors: null });
   } catch (err) {
     res.status(500).json({

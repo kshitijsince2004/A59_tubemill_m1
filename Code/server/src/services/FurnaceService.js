@@ -1,4 +1,4 @@
-import { query, queryOne } from '../db/pool';
+import { query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import { strictTheoreticalTubeWeightKg } from './ParamBandService.js';
 
@@ -244,6 +244,20 @@ export async function createAnnRun(input) {
       totals.qtyMt,
     ]
   );
+  try {
+    const { activeShiftLogId } = await import('./handover/productionGuard.js');
+    const sid = await activeShiftLogId(input.furnaceCode);
+    if (sid && row?.id) {
+      await query(`UPDATE txn.prod_ann_run SET shift_log_id = $1 WHERE id = $2 AND tenant_id = $3`, [
+        sid,
+        row.id,
+        config.tenantId,
+      ]);
+      row.shift_log_id = sid;
+    }
+  } catch {
+    /* best-effort */
+  }
   return mapAnn(row);
 }
 
@@ -446,21 +460,24 @@ export async function endFurnaceProduction(id) {
     return mapAnn(existing);
   }
 
-  try {
-    const { closeProcessStoppage } = await import('./ProcessStoppageService.js');
-    await closeProcessStoppage('FUR', id);
-  } catch {
-    /* no open stoppage is fine */
-  }
+  return withTransaction(async (client) => {
+    try {
+      const { closeProcessStoppage } = await import('./ProcessStoppageService.js');
+      await closeProcessStoppage('FUR', id, client);
+    } catch {
+      /* no open stoppage is fine */
+    }
 
-  const row = await queryOne(
-    `UPDATE txn.prod_ann_run
-     SET production_ended_at = now(), updated_at = now()
-     WHERE id = $1 AND tenant_id = $2
-     RETURNING *`,
-    [id, config.tenantId]
-  );
-  return mapAnn(row);
+    const row = await queryOne(
+      `UPDATE txn.prod_ann_run
+       SET production_ended_at = now(), updated_at = now()
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING *`,
+      [id, config.tenantId],
+      client
+    );
+    return mapAnn(row);
+  });
 }
 
 export async function addGasLog(input) {

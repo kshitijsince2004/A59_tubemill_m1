@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react';
 import { MachineHeadShell } from '../../components/layout/machinehead';
 import { apiRequest } from '../../api/http';
+import {
+  listMachineCrew,
+  createMachineCrew,
+  updateMachineCrew,
+  deleteMachineCrew,
+} from '../../lib/machineCrewService';
 import { ZButton, ZInput, ZSelect } from '../../ui';
+
+const emptyForm = {
+  machineCode: '',
+  roleLabel: 'Operator',
+  personName: '',
+  shiftCode: 'A',
+};
 
 export default function MachineHeadCrewPage({
   roleLabel,
@@ -12,20 +25,16 @@ export default function MachineHeadCrewPage({
 }) {
   const [rows, setRows] = useState([]);
   const [machines, setMachines] = useState([]);
-  const [form, setForm] = useState({
-    machineCode: '',
-    roleLabel: 'Operator',
-    personName: '',
-    shiftCode: 'A',
-  });
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
   const [msg, setMsg] = useState(null);
 
   async function load() {
     const [crew, mach] = await Promise.all([
-      apiRequest('/machine-head/crew'),
+      listMachineCrew(),
       apiRequest('/machines/master').catch(() => []),
     ]);
-    setRows(crew?.items ?? crew ?? []);
+    setRows(Array.isArray(crew) ? crew : crew?.items ?? []);
     setMachines(mach?.items ?? mach ?? []);
   }
 
@@ -33,26 +42,38 @@ export default function MachineHeadCrewPage({
     void load().catch((e) => setMsg(e instanceof Error ? e.message : 'Load failed'));
   }, []);
 
-  async function add() {
+  async function save() {
     setMsg(null);
     try {
-      await apiRequest('/machine-head/crew', {
-        method: 'POST',
-        body: JSON.stringify(form),
-      });
+      if (editingId) {
+        await updateMachineCrew(editingId, form);
+        setEditingId(null);
+      } else {
+        await createMachineCrew(form);
+      }
       setForm((f) => ({ ...f, personName: '' }));
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Add failed');
+      setMsg(e instanceof Error ? e.message : 'Save failed');
     }
   }
 
-  async function remove(id) {
+  function startEdit(row) {
+    setEditingId(row.id ?? row.crewId);
+    setForm({
+      machineCode: row.machineCode ?? '',
+      roleLabel: row.roleLabel ?? 'Operator',
+      personName: row.personName ?? row.memberName ?? '',
+      shiftCode: row.shiftCode ?? 'A',
+    });
+  }
+
+  async function remove(row) {
     try {
-      await apiRequest(`/machine-head/crew/${id}`, { method: 'DELETE' });
+      await deleteMachineCrew(row.id ?? row.crewId, row.machineCode);
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Delete failed');
+      setMsg(e instanceof Error ? e.message : 'Remove failed');
     }
   }
 
@@ -69,13 +90,14 @@ export default function MachineHeadCrewPage({
       <div className="mh-console">
         {msg ? <p className="mh-inline-msg">{msg}</p> : null}
         <section className="mh-panel">
-          <h2 className="mh-panel__title">Add crew</h2>
+          <h2 className="mh-panel__title">{editingId ? 'Edit crew' : 'Add crew'}</h2>
           <div className="mh-form-grid">
             <label>
               Machine
               <ZSelect
                 value={form.machineCode}
                 onChange={(e) => setForm((f) => ({ ...f, machineCode: e.target.value }))}
+                disabled={Boolean(editingId)}
               >
                 <option value="">Select…</option>
                 {machines.map((m) => (
@@ -113,9 +135,21 @@ export default function MachineHeadCrewPage({
               </ZSelect>
             </label>
           </div>
-          <ZButton variant="primary" onClick={() => void add()}>
-            Add
-          </ZButton>
+          <div className="mh-form-actions" style={{ display: 'flex', gap: 8 }}>
+            <ZButton variant="primary" onClick={() => void save()}>
+              {editingId ? 'Update' : 'Add'}
+            </ZButton>
+            {editingId ? (
+              <ZButton
+                onClick={() => {
+                  setEditingId(null);
+                  setForm(emptyForm);
+                }}
+              >
+                Cancel
+              </ZButton>
+            ) : null}
+          </div>
         </section>
         <section className="mh-panel">
           <h2 className="mh-panel__title">Roster ({rows.length})</h2>
@@ -131,13 +165,14 @@ export default function MachineHeadCrewPage({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id ?? r.crewId}>
                   <td className="mono">{r.machineCode}</td>
                   <td>{r.roleLabel}</td>
-                  <td>{r.personName}</td>
+                  <td>{r.personName ?? r.memberName}</td>
                   <td>{r.shiftCode}</td>
-                  <td>
-                    <ZButton onClick={() => void remove(r.id)}>Remove</ZButton>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    <ZButton onClick={() => startEdit(r)}>Edit</ZButton>
+                    <ZButton onClick={() => void remove(r)}>Remove</ZButton>
                   </td>
                 </tr>
               ))}

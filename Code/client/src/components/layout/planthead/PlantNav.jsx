@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
+import { confirmDialog } from '../../ConfirmDialog';
 
 const ITEMS = [
   { to: '/plant', label: 'Overview', end: true },
   { to: '/plant/live', label: 'Live', end: false },
   { to: '/plant/production', label: 'Production', end: false },
-  { to: '/plant/orders', label: 'Orders', end: false },
+  { to: '/plant/orders', label: 'Traceability', end: false },
   { to: '/plant/defect-intelligence', label: 'Defects', end: false },
   { to: '/plant/downtime-intelligence', label: 'Downtime', end: false },
   { to: '/plant/alerts', label: 'Alerts', end: false },
@@ -15,8 +16,16 @@ const ITEMS = [
 ];
 
 export default function PlantNav({ onLogout }) {
-  function handleLogout() {
-    if (window.confirm('Sign out of Plant Command Center?')) onLogout();
+  async function handleLogout() {
+    if (
+      await confirmDialog({
+        title: 'Sign out',
+        message: 'Sign out of Plant Command Center?',
+        confirmLabel: 'Sign out',
+      })
+    ) {
+      onLogout();
+    }
   }
 
   return (
@@ -46,7 +55,7 @@ export default function PlantNav({ onLogout }) {
           </NavLink>
         ))}
       </div>
-      <button type="button" className="ph-rail__link ph-rail__logout" onClick={handleLogout}>
+      <button type="button" className="ph-rail__link ph-rail__logout" onClick={() => void handleLogout()}>
         Sign out
       </button>
     </nav>

@@ -76,6 +76,7 @@ const ENDPOINTS = [
   { group: 'admin', method: 'GET', path: '/api/quality/specs' },
 
   { group: 'crew', method: 'GET', path: '/api/machine-head/crew?machineCode=A-59' },
+  { group: 'crew', method: 'GET', path: '/api/machines/A-59/session' },
 
   { group: 'reports', method: 'GET', path: '/api/reports/plant-head' },
   { group: 'reports', method: 'GET', path: '/api/reports/plant-head/backlog' },
@@ -86,6 +87,10 @@ const ENDPOINTS = [
   { group: 'reports', method: 'GET', path: '/api/reports/defects' },
   { group: 'reports', method: 'GET', path: '/api/reports/downtime' },
   { group: 'reports', method: 'GET', path: '/api/reports/orders' },
+  { group: 'reports', method: 'GET', path: '/api/reports/coil-traceability?coilNo=SMOKE' },
+  { group: 'reports', method: 'GET', path: '/api/reports/coil-suggest?q=SM' },
+  { group: 'reports', method: 'GET', path: '/api/traceability?q=SMOKE' },
+  { group: 'reports', method: 'GET', path: '/api/traceability/suggest?q=SM' },
   { group: 'reports', method: 'GET', path: '/api/reports/machine-head' },
   { group: 'reports', method: 'GET', path: '/api/reports/machine-head/pending' },
   { group: 'reports', method: 'GET', path: '/api/audit?limit=50' },

@@ -32,6 +32,7 @@ import {
   requireAuth,
   requireProcessAccess,
   requireMachineHead,
+  requireMachineHeadOrOverride,
   requireWritable } from
 
 '../middleware/authMiddleware';
@@ -58,6 +59,7 @@ function fail(res, status, message, issues) {
 
 function failCaught(res, e, fallback) {
   if (e instanceof ValidationError) return fail(res, 422, e.message, e.issues);
+  if (e?.status === 403 || e?.status === 401 || e?.status === 409) return fail(res, e.status, e.message);
   fail(res, 400, e instanceof Error ? e.message : fallback);
 }
 
@@ -191,6 +193,8 @@ router.get('/furnace/lots/:id', async (req, res) => {
 router.post('/furnace/lots', requireWritable, withIdempotency, async (req, res) => {
   try {
     const parsed = furCreateSchema.parse(req.body);
+    const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+    await guardProductionWrite(parsed.furnaceCode, req.user);
     const master = await resolveFurnaceMaster(parsed);
     const warnings = await assertValid('FUR', parsed, { master });
     const lot = await createAnnRun({
@@ -243,6 +247,11 @@ router.post('/furnace/lots/:id/submit', requireWritable, withIdempotency, async 
 
 router.post('/furnace/lots/:id/start', requireWritable, withIdempotency, async (req, res) => {
   try {
+    const existing = await getAnnRun(paramId(req));
+    if (existing?.furnaceCode) {
+      const { guardProductionWrite } = await import('../services/handover/productionGuard.js');
+      await guardProductionWrite(existing.furnaceCode, req.user);
+    }
     ok(res, await startFurnaceProduction(paramId(req)));
   } catch (e) {
     failCaught(res, e, 'Start failed');
@@ -257,7 +266,7 @@ router.post('/furnace/lots/:id/end', requireWritable, withIdempotency, async (re
   }
 });
 
-router.post('/furnace/lots/:id/approve', requireMachineHead, withIdempotency, async (req, res) => {
+router.post('/furnace/lots/:id/approve', requireMachineHeadOrOverride('APPROVE'), withIdempotency, async (req, res) => {
   try {
     const existing = await getAnnRun(paramId(req));
     if (!existing) return fail(res, 404, 'Not found');

@@ -14,7 +14,10 @@ function ageLabel(iso) {
 export default function DrawBenchCard({ row, onOpen, onAssign, assigning }) {
   const status = String(row.status ?? 'IDLE');
   const order = row.runningOrder;
-  const idle = status === 'IDLE' || status === 'COMPLETE';
+  const hasLot = Boolean(row.lotId);
+  const isIdle = status === 'IDLE';
+  const isComplete = status === 'COMPLETE';
+  const isActive = status === 'RUNNING' || status === 'PREPARING' || status === 'STOPPAGE';
 
   return (
     <article className={`db-card db-card--${status.toLowerCase()}`}>
@@ -24,17 +27,19 @@ export default function DrawBenchCard({ row, onOpen, onAssign, assigning }) {
       <div className="db-card__body">
         <header className="db-card__head">
           <div>
-            <h3 className="db-card__title">{row.benchCode}</h3>
+            <h3 className="db-card__title font-mono">{row.benchCode}</h3>
             <p className="db-card__label muted">
               {row.label || row.benchCode}
               {row.tonnageT != null ? ` · ${row.tonnageT}T` : ''}
             </p>
           </div>
           <div className="db-card__badges">
-            <ZBadge tone={statusTone(status === 'COMPLETE' ? 'COMPLETED' : status)} pulse={status === 'RUNNING' || status === 'STOPPAGE'}>
+            <ZBadge
+              tone={statusTone(status === 'COMPLETE' ? 'COMPLETED' : status)}
+              pulse={status === 'RUNNING' || status === 'STOPPAGE'}
+            >
               {status}
             </ZBadge>
-            <ZBadge tone="info">{row.plcStatus || 'PLC pending'}</ZBadge>
           </div>
         </header>
 
@@ -42,10 +47,6 @@ export default function DrawBenchCard({ row, onOpen, onAssign, assigning }) {
           <div>
             <dt>Work order</dt>
             <dd>{order?.workOrderNo || '—'}</dd>
-          </div>
-          <div>
-            <dt>Lot</dt>
-            <dd>{row.lotNo || '—'}</dd>
           </div>
           <div>
             <dt>Operator</dt>
@@ -65,7 +66,7 @@ export default function DrawBenchCard({ row, onOpen, onAssign, assigning }) {
           </div>
         </dl>
 
-        {order?.gradeCode || order?.size ? (
+        {order?.gradeCode || order?.size || order?.drawPass ? (
           <p className="db-card__spec muted">
             {[order?.gradeCode, order?.drawPass, order?.size].filter(Boolean).join(' · ')}
           </p>
@@ -79,13 +80,29 @@ export default function DrawBenchCard({ row, onOpen, onAssign, assigning }) {
         ) : null}
 
         <div className="db-card__actions btn-row">
-          <ZButton variant="primary" onClick={() => onOpen?.(row)}>
-            {idle && !order?.workOrderNo ? 'Open console' : 'Open production'}
-          </ZButton>
-          {idle ? (
-            <ZButton variant="ghost" disabled={assigning} onClick={() => onAssign?.(row)}>
-              Assign WO
+          {isActive && hasLot ? (
+            <ZButton variant="primary" onClick={() => onOpen?.(row)}>
+              Open production
             </ZButton>
+          ) : null}
+
+          {isIdle ? (
+            <ZButton variant="primary" disabled={assigning} onClick={() => onAssign?.(row)}>
+              Load order
+            </ZButton>
+          ) : null}
+
+          {isComplete ? (
+            <>
+              {hasLot ? (
+                <ZButton variant="primary" onClick={() => onOpen?.(row)}>
+                  View last
+                </ZButton>
+              ) : null}
+              <ZButton variant="ghost" disabled={assigning} onClick={() => onAssign?.(row)}>
+                Load order
+              </ZButton>
+            </>
           ) : null}
         </div>
       </div>

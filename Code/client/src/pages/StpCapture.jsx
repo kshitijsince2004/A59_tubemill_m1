@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stpApi } from '../api/processApi';
 import { downloadXlsx, stoppageApi } from '../api/plantApi';
-import { ZButton, ZInput, ZSelect, ZBadge, ZOperatorCard, ZPageHeader, statusTone } from '../ui';
+import { ZButton, ZInput, ZSelect, ZBadge } from '../ui';
 import { getStoredUser, primaryRole } from '../lib/authStore';
 import ProcessStationShell from '../components/process/ProcessStationShell';
 import StoppageDialog from '../components/StoppageDialog';
@@ -11,25 +11,14 @@ import StpChemicalAdditionModal from '../components/stp/StpChemicalAdditionModal
 import StpProcessMonitor from '../components/stp/StpProcessMonitor';
 import StpMachineOverview from '../components/stp/StpMachineOverview';
 import StpBathChemPanel from '../components/stp/StpBathChemPanel';
+import StpWorkOrderHub from '../components/stp/StpWorkOrderHub';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from 'react/jsx-runtime';
 
 const STP_NAV_ITEMS = [
-  { id: 'order', icon: '▣', label: 'Order' },
+  { id: 'order', icon: '▣', label: 'Workorder' },
   { id: 'capture', icon: '◎', label: 'Capture' },
   { id: 'monitoring', icon: '◈', label: 'Monitoring' },
   { id: 'history', icon: '▤', label: 'History' },
-];
-
-const ORDER_SUB = [
-  { id: 'work-orders', label: 'Work Orders' },
-  { id: 'console', label: 'Production Console' },
-];
-
-const CAPTURE_SUB = [
-  { id: 'production', label: 'Production' },
-  { id: 'bath', label: 'Bath Analysis' },
-  { id: 'chem', label: 'Chemical Addition' },
-  { id: 'remarks', label: 'Remarks / Stoppage' },
 ];
 
 const HIST_SEGS = [
@@ -102,27 +91,6 @@ function downloadText(filename, text) {
   URL.revokeObjectURL(url);
 }
 
-function SubNav({ items, active, onChange }) {
-  return /*#__PURE__*/ _jsx('div', {
-    className: 'stp-subnav',
-    role: 'tablist',
-    children: items.map((item) =>
-      /*#__PURE__*/ _jsx(
-        'button',
-        {
-          type: 'button',
-          role: 'tab',
-          'aria-selected': active === item.id,
-          className: `stp-subnav__btn${active === item.id ? ' is-active' : ''}`,
-          onClick: () => onChange(item.id),
-          children: item.label,
-        },
-        item.id
-      )
-    ),
-  });
-}
-
 function RoField({ label, value }) {
   return /*#__PURE__*/ _jsxs('div', {
     className: 'stp-ro-field',
@@ -148,13 +116,11 @@ export default function StpCapture({
   const isWritable = role !== 'PLANT_HEAD';
 
   const [nav, setNav] = useState('order');
-  const [orderSub, setOrderSub] = useState('work-orders');
-  const [captureSub, setCaptureSub] = useState('production');
   const [histSeg, setHistSeg] = useState('production');
   const [selectedId, setSelectedId] = useState(null);
+  const [showConsole, setShowConsole] = useState(false);
   const [selectedWo, setSelectedWo] = useState(null);
   const [selectedLineNo, setSelectedLineNo] = useState(null);
-  const [woFilter, setWoFilter] = useState('');
   const [histWo, setHistWo] = useState('');
   const [histStatus, setHistStatus] = useState('');
   const [histFrom, setHistFrom] = useState('');
@@ -282,17 +248,8 @@ export default function StpCapture({
     : stopCodesQ.data?.items ?? [];
 
   const orders = useMemo(() => {
-    const list = Array.isArray(ordersQ.data) ? ordersQ.data : ordersQ.data?.items ?? [];
-    const q = woFilter.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((o) => {
-      const hay = [o.workOrderNo, o.customerCode, o.gradeCode, o.lotNo]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [ordersQ.data, woFilter]);
+    return Array.isArray(ordersQ.data) ? ordersQ.data : ordersQ.data?.items ?? [];
+  }, [ordersQ.data]);
 
   const selectedOrder = useMemo(
     () => orders.find((o) => o.workOrderNo === selectedWo) ?? null,
@@ -335,11 +292,6 @@ export default function StpCapture({
     });
   }, [lot?.id, lot?.updatedAt, lot?.qtyNo, lot?.qtyMt, lot?.surfaceFinish, lot?.disposition, lot?.remarks, lot?.shiftRef]);
 
-  useEffect(() => {
-    if (captureSub === 'bath') setBathOpen(true);
-    if (captureSub === 'chem') setChemOpen(true);
-  }, [captureSub]);
-
   function invalidate() {
     qc.invalidateQueries({ queryKey: ['stp-lots'] });
     qc.invalidateQueries({ queryKey: ['stp-lot', selectedId] });
@@ -354,33 +306,24 @@ export default function StpCapture({
 
   function openConsole(lotId) {
     setSelectedId(lotId);
-    setOrderSub('console');
-    setCaptureSub('production');
-    setNav((n) => (n === 'history' || n === 'monitoring' ? n : 'order'));
+    setShowConsole(true);
+    setNav('capture');
   }
 
-  async function handleAssign() {
-    if (!selectedWo || !selectedLineNo) {
-      setErr('Select a work order line first');
-      return;
-    }
-    setBusy(true);
+  function openCaptureOverview(lotId) {
+    if (lotId) setSelectedId(lotId);
+    setShowConsole(false);
+    setNav('capture');
+  }
+
+  function handleMoveToProduction(created) {
+    if (!created?.id) return;
+    setMsg(created.lotNo ? `Assigned ${created.lotNo}` : 'Assigned workorder');
     setErr('');
-    try {
-      const created = await stpApi.assign({
-        workOrderNo: selectedWo,
-        lineNo: selectedLineNo,
-        machineCode: 'STP-01',
-        shiftRef: prodForm.shiftRef || 'A',
-      });
-      setMsg(`Assigned ${created.lotNo}`);
-      openConsole(created.id);
-      invalidate();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Assign failed');
-    } finally {
-      setBusy(false);
-    }
+    if (created.workOrderNo) setSelectedWo(created.workOrderNo);
+    if (created.workOrderLineNo != null) setSelectedLineNo(created.workOrderLineNo);
+    openCaptureOverview(created.id);
+    invalidate();
   }
 
   async function flushProdAutosave() {
@@ -398,21 +341,6 @@ export default function StpCapture({
       remarks: f.remarks || undefined,
       shiftRef: f.shiftRef || undefined,
     });
-  }
-
-  async function handleSave() {
-    if (!selectedId || !isWritable) return;
-    setBusy(true);
-    setErr('');
-    try {
-      await flushProdAutosave();
-      setMsg('Saved');
-      invalidate();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Save failed');
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function handleStart() {
@@ -550,7 +478,6 @@ export default function StpCapture({
       await stpApi.addBathAnalysis(null, body);
       setMsg('Bath analysis saved');
       setBathOpen(false);
-      setCaptureSub('production');
       invalidate();
     } finally {
       setBathBusy(false);
@@ -563,7 +490,6 @@ export default function StpCapture({
       await stpApi.addChemicalAddition(null, body);
       setMsg('Chemical addition saved');
       setChemOpen(false);
-      setCaptureSub('production');
       invalidate();
     } finally {
       setChemBusy(false);
@@ -602,12 +528,6 @@ export default function StpCapture({
     !lot?.productionEndedAt &&
     (displayStatus === 'RUNNING' || displayStatus === 'STOPPAGE');
   const canOpenStoppage = isWritable && !!selectedId && displayStatus === 'RUNNING' && !openStoppage;
-  const canEndStoppage = isWritable && !!selectedId && displayStatus === 'STOPPAGE';
-  const canSave =
-    isWritable &&
-    !!selectedId &&
-    lot?.status !== 'APPROVED' &&
-    (displayStatus === 'RUNNING' || displayStatus === 'STOPPAGE' || displayStatus === 'IDLE');
 
   const activeOrderLabel = lot?.workOrderNo
     ? `${lot.workOrderNo} · LINE ${lot.workOrderLineNo ?? '—'}`
@@ -787,11 +707,12 @@ export default function StpCapture({
       canEnd,
       productionBlock,
       emptyTitle: 'Production console',
-      emptyHint: 'Select a work order line, then swipe to Start production.',
+      emptyHint: 'Select a workorder, then Open Production from Capture overview.',
       onGoOrders: () => {
+        setShowConsole(false);
         setNav('order');
-        setOrderSub('work-orders');
       },
+      onBack: () => setShowConsole(false),
       onOpenStoppage: () => setStoppageDialogOpen(true),
       onEndStoppage: () => void handleEndStoppage(),
       onOpenBath: () => setBathOpen(true),
@@ -799,201 +720,6 @@ export default function StpCapture({
       onEnd: handleEnd,
       onAdvance: handleAdvanceStage,
       onSaveReading: handleMonitorSave,
-    });
-  }
-
-  function renderWorkOrders() {
-    return /*#__PURE__*/ _jsxs('div', {
-      className: 'stp-orders',
-      children: [
-        /*#__PURE__*/ _jsx(ZPageHeader, {
-          title: 'STP · Work Orders',
-          subtitle: 'Select a work order, then a line, then open Production Console',
-        }),
-        /*#__PURE__*/ _jsxs('div', {
-          className: 'stp-orders__toolbar',
-          children: [
-            /*#__PURE__*/ _jsx(ZInput, {
-              placeholder: 'Search WO / customer / grade',
-              value: woFilter,
-              onChange: (e) => setWoFilter(e.target.value),
-            }),
-            /*#__PURE__*/ _jsx(ZButton, {
-              variant: 'ghost',
-              onClick: () => ordersQ.refetch(),
-              children: 'Refresh',
-            }),
-          ],
-        }),
-        /*#__PURE__*/ _jsx('div', {
-          className: 'furnace-history__table-wrap',
-          children: /*#__PURE__*/ _jsxs('table', {
-            className: 'furnace-hist-table',
-            children: [
-              /*#__PURE__*/ _jsx('thead', {
-                children: /*#__PURE__*/ _jsxs('tr', {
-                  children: [
-                    /*#__PURE__*/ _jsx('th', { children: 'Work order' }),
-                    /*#__PURE__*/ _jsx('th', { children: 'Customer' }),
-                    /*#__PURE__*/ _jsx('th', { children: 'Grade' }),
-                    /*#__PURE__*/ _jsx('th', { children: 'Lines' }),
-                    /*#__PURE__*/ _jsx('th', { children: 'Qty' }),
-                    /*#__PURE__*/ _jsx('th', { children: 'Status' }),
-                  ],
-                }),
-              }),
-              /*#__PURE__*/ _jsx('tbody', {
-                children: orders.map((o) =>
-                  /*#__PURE__*/ _jsxs(
-                    'tr',
-                    {
-                      className:
-                        selectedWo === o.workOrderNo
-                          ? 'furnace-hist-table__row is-selected'
-                          : 'furnace-hist-table__row',
-                      onClick: () => {
-                        setSelectedWo(o.workOrderNo);
-                        setSelectedLineNo(o.lines?.[0]?.lineNo ?? 1);
-                      },
-                      children: [
-                        /*#__PURE__*/ _jsx('td', { children: o.workOrderNo }),
-                        /*#__PURE__*/ _jsx('td', { children: o.customerCode || '—' }),
-                        /*#__PURE__*/ _jsx('td', { children: o.gradeCode || '—' }),
-                        /*#__PURE__*/ _jsx('td', { children: o.lines?.length ?? 0 }),
-                        /*#__PURE__*/ _jsx('td', {
-                          children: o.qtyPieces != null ? o.qtyPieces : o.plannedQty ?? '—',
-                        }),
-                        /*#__PURE__*/ _jsx('td', { children: o.status }),
-                      ],
-                    },
-                    o.workOrderNo
-                  )
-                ),
-              }),
-            ],
-          }),
-        }),
-        selectedOrder
-          ? /*#__PURE__*/ _jsxs(ZOperatorCard, {
-              title: `WO ${selectedOrder.workOrderNo} · Lines`,
-              children: [
-                /*#__PURE__*/ _jsx('div', {
-                  className: 'furnace-history__table-wrap',
-                  children: /*#__PURE__*/ _jsxs('table', {
-                    className: 'furnace-hist-table',
-                    children: [
-                      /*#__PURE__*/ _jsx('thead', {
-                        children: /*#__PURE__*/ _jsxs('tr', {
-                          children: [
-                            /*#__PURE__*/ _jsx('th', { children: 'Line' }),
-                            /*#__PURE__*/ _jsx('th', { children: 'Customer' }),
-                            /*#__PURE__*/ _jsx('th', { children: 'Grade' }),
-                            /*#__PURE__*/ _jsx('th', { children: 'Size' }),
-                            /*#__PURE__*/ _jsx('th', { children: 'Coil' }),
-                            /*#__PURE__*/ _jsx('th', { children: 'Pass' }),
-                            /*#__PURE__*/ _jsx('th', { children: 'Next' }),
-                            /*#__PURE__*/ _jsx('th', { children: 'Qty' }),
-                          ],
-                        }),
-                      }),
-                      /*#__PURE__*/ _jsx('tbody', {
-                        children: (selectedOrder.lines ?? []).map((l) =>
-                          /*#__PURE__*/ _jsxs(
-                            'tr',
-                            {
-                              className:
-                                selectedLineNo === l.lineNo
-                                  ? 'furnace-hist-table__row is-selected'
-                                  : 'furnace-hist-table__row',
-                              onClick: () => setSelectedLineNo(l.lineNo),
-                              children: [
-                                /*#__PURE__*/ _jsx('td', { children: l.lineNo }),
-                                /*#__PURE__*/ _jsx('td', { children: l.customerCode || '—' }),
-                                /*#__PURE__*/ _jsx('td', { children: l.gradeCode || '—' }),
-                                /*#__PURE__*/ _jsx('td', { children: fmtSize(l.size) }),
-                                /*#__PURE__*/ _jsx('td', { children: l.coilNo || '—' }),
-                                /*#__PURE__*/ _jsx('td', { children: l.passNo ?? '—' }),
-                                /*#__PURE__*/ _jsx('td', { children: l.nextProcess || '—' }),
-                                /*#__PURE__*/ _jsx('td', {
-                                  children: l.qtyPieces ?? l.plannedQty ?? '—',
-                                }),
-                              ],
-                            },
-                            l.lineNo
-                          )
-                        ),
-                      }),
-                    ],
-                  }),
-                }),
-                /*#__PURE__*/ _jsxs('div', {
-                  className: 'stp-orders__line-actions',
-                  children: [
-                    /*#__PURE__*/ _jsx(ZButton, {
-                      variant: 'primary',
-                      disabled: !isWritable || busy || !selectedLineNo,
-                      onClick: () => void handleAssign(),
-                      children: busy ? 'Assigning…' : 'Open Production Console',
-                    }),
-                    err
-                      ? /*#__PURE__*/ _jsx('p', { className: 'banner banner--error', children: err })
-                      : null,
-                  ],
-                }),
-              ],
-            })
-          : null,
-      ],
-    });
-  }
-
-  function renderRemarks() {
-    return /*#__PURE__*/ _jsxs(ZOperatorCard, {
-      title: 'Remarks / Stoppage',
-      children: [
-        !selectedId
-          ? /*#__PURE__*/ _jsx('p', {
-              className: 'empty-hint',
-              children: 'Open a production run first.',
-            })
-          : /*#__PURE__*/ _jsxs(_Fragment, {
-              children: [
-                /*#__PURE__*/ _jsxs('label', {
-                  className: 'stp-remarks-field',
-                  children: [
-                    'Lot remarks',
-                    /*#__PURE__*/ _jsx(ZInput, {
-                      disabled: !isWritable || lot?.status === 'APPROVED',
-                      value: prodForm.remarks,
-                      onChange: (e) => setProdForm((f) => ({ ...f, remarks: e.target.value })),
-                    }),
-                  ],
-                }),
-                /*#__PURE__*/ _jsxs('div', {
-                  className: 'stp-console__actions',
-                  children: [
-                    /*#__PURE__*/ _jsx(ZButton, {
-                      disabled: !canSave || busy,
-                      onClick: () => void handleSave(),
-                      children: 'Save remarks',
-                    }),
-                    canOpenStoppage
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          onClick: () => setStoppageDialogOpen(true),
-                          children: 'Open stoppage',
-                        })
-                      : null,
-                    canEndStoppage
-                      ? /*#__PURE__*/ _jsx(ZButton, {
-                          onClick: () => void handleEndStoppage(),
-                          children: 'End stoppage',
-                        })
-                      : null,
-                  ],
-                }),
-              ],
-            }),
-      ],
     });
   }
 
@@ -1141,8 +867,6 @@ export default function StpCapture({
                             },
                             onDoubleClick: () => {
                               openConsole(row.id);
-                              setNav('order');
-                              setOrderSub('console');
                             },
                             children:
                               histSeg === 'production'
@@ -1390,12 +1114,8 @@ export default function StpCapture({
               className: 'stp-history__footer',
               children: /*#__PURE__*/ _jsx(ZButton, {
                 variant: 'primary',
-                onClick: () => {
-                  openConsole(selectedId);
-                  setNav('order');
-                  setOrderSub('console');
-                },
-                children: 'Open Production Console',
+                onClick: () => openConsole(selectedId),
+                children: 'Open Production',
               }),
             })
           : null,
@@ -1403,80 +1123,51 @@ export default function StpCapture({
     });
   }
 
-  const showOverviewInCapture = nav === 'capture' && captureSub === 'production';
-
-  const orderContent = /*#__PURE__*/ _jsxs('div', {
-    className: 'stp-order-pane',
-    children: [
-      /*#__PURE__*/ _jsx(SubNav, {
-        items: ORDER_SUB,
-        active: orderSub,
-        onChange: setOrderSub,
-      }),
-      orderSub === 'work-orders' ? renderWorkOrders() : renderMergedRun(),
-    ],
+  const orderContent = /*#__PURE__*/ _jsx(StpWorkOrderHub, {
+    isWritable,
+    shiftRef: prodForm.shiftRef || 'A',
+    selectedWo,
+    selectedLineNo,
+    onSelect: (wo, lineNo) => {
+      setSelectedWo(wo);
+      setSelectedLineNo(lineNo);
+      setErr('');
+    },
+    onMoveToProduction: handleMoveToProduction,
+    onOpenConsole: (lot) => {
+      if (!lot?.id) return;
+      if (lot.workOrderNo) setSelectedWo(lot.workOrderNo);
+      if (lot.workOrderLineNo != null) setSelectedLineNo(lot.workOrderLineNo);
+      openConsole(lot.id);
+    },
   });
 
-  const captureBody = /*#__PURE__*/ _jsxs('div', {
-    className: 'stp-capture-pane',
-    children: [
-      /*#__PURE__*/ _jsx(SubNav, {
-        items: CAPTURE_SUB,
-        active: captureSub,
-        onChange: (id) => {
-          setCaptureSub(id);
-          if (id === 'bath') setBathOpen(true);
-          if (id === 'chem') setChemOpen(true);
+  const captureBody = showConsole
+    ? /*#__PURE__*/ _jsx('div', {
+        className: 'stp-capture-pane',
+        children: renderMergedRun(),
+      })
+    : /*#__PURE__*/ _jsx(StpMachineOverview, {
+        selectedLot: lot,
+        onGoOrders: () => setNav('order'),
+        onOpenMonitoring: () => setNav('monitoring'),
+        onOpenProduction: (lotId) => {
+          if (lotId) openConsole(lotId);
+          else if (selectedId) openConsole(selectedId);
         },
-      }),
-      captureSub === 'production'
-        ? /*#__PURE__*/ _jsx(StpMachineOverview, {
-            selectedLot: lot,
-            onGoOrders: () => {
-              setNav('order');
-              setOrderSub('work-orders');
-            },
-            onOpenMonitoring: () => {
-              setNav('monitoring');
-            },
-            onSelectUpcoming: (item) => {
-              if (item?.workOrderNo) setSelectedWo(item.workOrderNo);
-              if (item?.lineNo != null) setSelectedLineNo(item.lineNo);
-              setNav('order');
-              setOrderSub('work-orders');
-            },
-          })
-        : captureSub === 'remarks'
-          ? renderRemarks()
-          : /*#__PURE__*/ _jsxs(ZOperatorCard, {
-              title: captureSub === 'bath' ? 'Bath Analysis' : 'Chemical Addition',
-              children: [
-                /*#__PURE__*/ _jsx('p', {
-                  className: 'empty-hint',
-                  children: 'Bath and chemical capture is independent of the running work order.',
-                }),
-                /*#__PURE__*/ _jsx(ZButton, {
-                  variant: 'primary',
-                  onClick: () => (captureSub === 'bath' ? setBathOpen(true) : setChemOpen(true)),
-                  children: captureSub === 'bath' ? 'Open Bath Analysis' : 'Open Chemical Addition',
-                }),
-              ],
-            }),
-      msg && !showOverviewInCapture
-        ? /*#__PURE__*/ _jsx('p', { className: 'banner banner--ok', children: msg })
-        : null,
-      err && !showOverviewInCapture
-        ? /*#__PURE__*/ _jsx('p', { className: 'banner banner--error', children: err })
-        : null,
-    ],
-  });
+        onSelectUpcoming: (item) => {
+          if (item?.workOrderNo) setSelectedWo(item.workOrderNo);
+          if (item?.lineNo != null) setSelectedLineNo(item.lineNo);
+          setNav('order');
+        },
+      });
 
   return /*#__PURE__*/ _jsxs(_Fragment, {
     children: [
       /*#__PURE__*/ _jsx(ProcessStationShell, {
         processId,
         processLabel: 'STP',
-        machineCode: 'STP-01',
+        machineCode: 'STP-LINE',
         processes,
         onProcessChange,
         onLogout,
@@ -1496,13 +1187,15 @@ export default function StpCapture({
           setNav(id);
           setMsg('');
           setErr('');
+          if (id !== 'capture') setShowConsole(false);
         },
         onManualStop: canOpenStoppage ? () => setStoppageDialogOpen(true) : undefined,
         manualStopDisabled: !canOpenStoppage,
         ordersContent: orderContent,
         historyContent: renderHistory(),
         monitoringContent: renderMonitoring(),
-        captureTitle: lot ? `${lot.lotNo} · ${displayStatus}` : 'STP Capture',
+        hideCaptureHeader: true,
+        captureTitle: lot ? `${lot.lotNo} · ${displayStatus}` : 'Capture',
         extraRight: /*#__PURE__*/ _jsxs(_Fragment, {
           children: [
             /*#__PURE__*/ _jsx(ZBadge, { tone: 'success', pulse: true, children: 'LIVE' }),
@@ -1539,19 +1232,13 @@ export default function StpCapture({
       /*#__PURE__*/ _jsx(StpBathAnalysisModal, {
         open: bathOpen,
         busy: bathBusy,
-        onClose: () => {
-          setBathOpen(false);
-          if (captureSub === 'bath') setCaptureSub('production');
-        },
+        onClose: () => setBathOpen(false),
         onSave: handleBathSave,
       }),
       /*#__PURE__*/ _jsx(StpChemicalAdditionModal, {
         open: chemOpen,
         busy: chemBusy,
-        onClose: () => {
-          setChemOpen(false);
-          if (captureSub === 'chem') setCaptureSub('production');
-        },
+        onClose: () => setChemOpen(false),
         onSave: handleChemSave,
       }),
     ],

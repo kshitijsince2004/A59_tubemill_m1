@@ -11,8 +11,9 @@ const ROLE_RANK = {
 export const PROCESS_META = [
   { id: 'TM', label: 'Tube Mill', machineCode: 'A-59', path: '/tm' },
   { id: 'FUR', label: 'Furnace', machineCode: 'RHF-03', path: '/fur' },
-  { id: 'STP', label: 'STP', machineCode: 'STP-LINE', path: '/stp' },
-  { id: 'DRW', label: 'Draw Bench', machineCode: 'DRW-01', path: '/drw' },
+  { id: 'STP', label: 'STP', machineCode: 'STP-01', path: '/stp' },
+  // Seeded benches are DB-*; DRW-01 is a stoppage code, not a machine.
+  { id: 'DRW', label: 'Draw Bench', machineCode: 'DB-10T', path: '/drw' },
   { id: 'SWG', label: 'Swaging', machineCode: 'SWG-01', path: '/swg' },
 ];
 

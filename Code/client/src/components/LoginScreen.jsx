@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 
 import { ZButton, ZInput } from '../ui';
-import { setDevRoleOverride } from '../api/tubemillClient';
-import { setDevRoleOverride as setProcessRole } from '../api/http';
+import { setDevRoleOverride } from '../api/http';
 import { authApi } from '../api/authApi';
-import { setAccessToken, setStoredUser, clearAuth } from '../lib/authStore';
+import { setAccessToken, setStoredUser, clearAuth, getAccessToken } from '../lib/authStore';
 import { initSuperTokensClient, signOutSession, staffSignIn, syncAccessTokenFromSession } from '../lib/supertokens';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 
-/** Demo seed badges — all use PIN 1234. */
+/** Demo seed badges — local/dev only; all use PIN 1234. */
+const SHOW_DEMO_CHIPS = import.meta.env.DEV;
 const DEMO_BADGE_PIN = '1234';
 const DEMO_BADGES = [
   { badge: 'OP-A59', label: 'TM op' },
@@ -25,10 +25,10 @@ const DEMO_BADGES = [
 
 export default function LoginScreen({ onUnlocked }) {
   const [mode, setMode] = useState('badge');
-  const [badge, setBadge] = useState('OP-A59');
-  const [pin, setPin] = useState(DEMO_BADGE_PIN);
-  const [email, setEmail] = useState('admin@a59.local');
-  const [password, setPassword] = useState('Admin123!');
+  const [badge, setBadge] = useState(SHOW_DEMO_CHIPS ? 'OP-A59' : '');
+  const [pin, setPin] = useState(SHOW_DEMO_CHIPS ? DEMO_BADGE_PIN : '');
+  const [email, setEmail] = useState(SHOW_DEMO_CHIPS ? 'admin@a59.local' : '');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [allowHeader, setAllowHeader] = useState(false);
@@ -69,10 +69,7 @@ export default function LoginScreen({ onUnlocked }) {
     localStorage.setItem('a59-unlocked', '1');
     localStorage.setItem('a59-role', user.primaryRole);
     localStorage.setItem('a59-badge', user.empCode ?? user.username);
-    if (!keepDevRole) {
-      setDevRoleOverride(null);
-      setProcessRole(null);
-    }
+    if (!keepDevRole) setDevRoleOverride(null);
     onUnlocked(user);
   }
 
@@ -94,6 +91,9 @@ export default function LoginScreen({ onUnlocked }) {
       // Prefer st-access-token captured from response headers (custom session create).
       // Do not wipe it via ST client sync when web-js has no session yet.
       await syncAccessTokenFromSession();
+      if (!getAccessToken()) {
+        throw new Error('Login succeeded but no session token received — check SuperTokens');
+      }
       try {
         const me = await authApi.me();
         await afterLogin(me.user ?? data.user);
@@ -104,7 +104,6 @@ export default function LoginScreen({ onUnlocked }) {
       if (allowHeader) {
         const role = 'OPERATOR';
         setDevRoleOverride(role);
-        setProcessRole(role);
         const fake = {
           userId: 'dev',
           username: badge,
@@ -120,7 +119,23 @@ export default function LoginScreen({ onUnlocked }) {
             { processCode: 'DRW', level: 'WRITE' },
             { processCode: 'SWG', level: 'WRITE' },
           ],
-          machineAccess: [],
+          machineAccess: [
+            { machineCode: 'A-59', level: 'WRITE' },
+            { machineCode: 'RHF-03', level: 'WRITE' },
+            { machineCode: 'RHF-04', level: 'WRITE' },
+            { machineCode: 'RHF-05', level: 'WRITE' },
+            { machineCode: 'STP-LINE', level: 'WRITE' },
+            { machineCode: 'STP-01', level: 'WRITE' },
+            { machineCode: 'DB-10T', level: 'WRITE' },
+            { machineCode: 'DB-20T', level: 'WRITE' },
+            { machineCode: 'DB-40T', level: 'WRITE' },
+            { machineCode: 'DB-45T', level: 'WRITE' },
+            { machineCode: 'DB-80T', level: 'WRITE' },
+            { machineCode: 'DB-120T', level: 'WRITE' },
+            { machineCode: 'DB-180T', level: 'WRITE' },
+            { machineCode: 'DB-250T', level: 'WRITE' },
+            { machineCode: 'SWG-01', level: 'WRITE' },
+          ],
         };
         await afterLogin(fake, { keepDevRole: true });
         setError(err instanceof Error ? `${err.message} — using dev header role` : 'Dev fallback');
@@ -205,7 +220,7 @@ export default function LoginScreen({ onUnlocked }) {
             placeholder: "1234",
             autoComplete: "current-password",
           }), /*#__PURE__*/
-          _jsxs("div", { className: "login-screen__demos", children: [/*#__PURE__*/
+          SHOW_DEMO_CHIPS ? _jsxs("div", { className: "login-screen__demos", children: [/*#__PURE__*/
             _jsx("span", { className: "eyebrow", children: "Demo (PIN 1234)" }), /*#__PURE__*/
             _jsx("div", { className: "login-screen__demo-chips", children:
               DEMO_BADGES.map((d) => /*#__PURE__*/
@@ -218,7 +233,7 @@ export default function LoginScreen({ onUnlocked }) {
               }, d.badge)
               )
             })] }
-          ), /*#__PURE__*/
+          ) : null, /*#__PURE__*/
           _jsx(ZButton, {
             variant: "primary",
             disabled: busy,

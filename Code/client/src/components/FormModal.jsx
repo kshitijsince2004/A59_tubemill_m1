@@ -14,11 +14,16 @@ export default function FormModal({
   footer,
   wide = true,
   className = '',
+  preventScrimClose = false,
 }) {
   if (!open) return null;
 
   return (
-    <div className="modal-scrim" role="presentation" onClick={onClose}>
+    <div
+      className="modal-scrim"
+      role="presentation"
+      onClick={preventScrimClose ? undefined : onClose}
+    >
       <div
         className={`modal-card${wide ? ' modal-card--form' : ''} ${className}`.trim()}
         role="dialog"

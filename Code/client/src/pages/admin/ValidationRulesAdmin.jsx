@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AdminShell } from '../../components/layout/admin';
-import { ZButton, ZInput } from '../../ui';
+import { ZButton, ZInput, showToast } from '../../ui';
+import { confirmDialog } from '../../components/ConfirmDialog';
 import { validationRulesApi } from '../../api/validationRulesApi';
 
 const PROCESSES = ['TM', 'FUR', 'STP', 'DRW', 'SWG'];
@@ -62,6 +63,7 @@ export default function ValidationRulesAdmin({ roleLabel, onLogout, firstFloorPa
         enabled: form.enabled,
       });
       setForm({ ...form, field: '', min: '', max: '', values: '' });
+      showToast('Validation rule saved');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -69,9 +71,19 @@ export default function ValidationRulesAdmin({ roleLabel, onLogout, firstFloorPa
   }
 
   async function remove(id) {
-    if (!window.confirm('Delete overlay rule?')) return;
+    if (
+      !(await confirmDialog({
+        title: 'Delete rule',
+        message: 'Delete overlay rule?',
+        confirmLabel: 'Delete',
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     try {
       await validationRulesApi.remove(id);
+      showToast('Validation rule deleted');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');

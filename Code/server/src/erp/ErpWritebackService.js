@@ -44,7 +44,7 @@ export async function enqueueTmWriteback(runId) {
   let staged = 0;
   const base = {
     workOrderNo: run.workOrderNo,
-    lotNo: coils[0]?.coil_id ?? run.bcBatchNumber
+    lotNo: coils[0]?.coil_tag ?? run.bcBatchNumber
   };
 
   if (
@@ -196,17 +196,18 @@ export async function enqueueDrwWriteback(id) {
   return { staged };
 }
 
-/** Demo flush: STAGED → File connector post → LOGGED. */
+/** Demo flush: STAGED (and retriable FAILED) → File connector post → LOGGED. */
 export async function flushWriteback(limit = 50) {
+  const maxAttempts = 5;
   const jobs = await query(
-
-
-
-
-    `SELECT id, api, payload FROM erp.writeback_job
-     WHERE tenant_id = $1 AND status = 'STAGED'
+    `SELECT id, api, payload, attempts FROM erp.writeback_job
+     WHERE tenant_id = $1
+       AND (
+         status = 'STAGED'
+         OR (status = 'FAILED' AND COALESCE(attempts, 0) < $3)
+       )
      ORDER BY created_at ASC LIMIT $2`,
-    [config.tenantId, limit]
+    [config.tenantId, limit, maxAttempts]
   );
 
   const connector = getBcConnector();
@@ -219,6 +220,7 @@ export async function flushWriteback(limit = 50) {
     JSON.parse(job.payload) :
     job.payload;
     try {
+      // Reset FAILED → in-flight via attempts bump only after success/fail update.
       const result = await connector.postJournal(payload.kind ?? job.api, payload);
       await query(
         `UPDATE erp.writeback_job

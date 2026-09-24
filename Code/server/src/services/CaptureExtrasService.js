@@ -1,4 +1,4 @@
-import { query, queryOne } from '../db/pool';
+import { query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 
 
@@ -46,25 +46,31 @@ export async function addArcWeld(form) {
   );
   if (!coil) throw new Error('Coil input not found');
   const runId = form.runId ?? coil.run_id;
-  const row = await queryOne(
-    `INSERT INTO txn.tm_arcweld_log (
-      tenant_id, coil_input_id, run_id, current_amp, thk_mm, grade_code, operator_ref, remark
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [
-    config.tenantId,
-    form.coilInputId,
-    runId,
-    form.currentAmp ?? null,
-    form.thkMm ?? null,
-    form.gradeCode ?? null,
-    form.operatorRef ?? null,
-    form.remark ?? null]
-
-  );
-  if (row) {
-    await query(`UPDATE txn.prod_tm_coil_input SET arcweld_log_id = $2 WHERE id = $1`, [form.coilInputId, row.id]);
-  }
-  return row;
+  return withTransaction(async (client) => {
+    const row = await queryOne(
+      `INSERT INTO txn.tm_arcweld_log (
+        tenant_id, coil_input_id, run_id, current_amp, thk_mm, grade_code, operator_ref, remark
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [
+      config.tenantId,
+      form.coilInputId,
+      runId,
+      form.currentAmp ?? null,
+      form.thkMm ?? null,
+      form.gradeCode ?? null,
+      form.operatorRef ?? null,
+      form.remark ?? null],
+      client
+    );
+    if (row) {
+      await query(
+        `UPDATE txn.prod_tm_coil_input SET arcweld_log_id = $2 WHERE id = $1`,
+        [form.coilInputId, row.id],
+        client
+      );
+    }
+    return row;
+  });
 }
 
 export async function listArcWelds(runId) {
@@ -72,29 +78,35 @@ export async function listArcWelds(runId) {
 }
 
 export async function addEdgeMill(runId, form) {
-  const row = await queryOne(
-    `INSERT INTO txn.prod_tm_edgemill (
-      tenant_id, run_id, coil_input_id, od, thk_mm, grade_code,
-      width_before_mm, width_after_mm, edge_condition, operator_ref, remark
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [
-    config.tenantId,
-    runId,
-    form.coilInputId ?? null,
-    form.od ?? null,
-    form.thkMm ?? null,
-    form.gradeCode ?? null,
-    form.widthBeforeMm ?? null,
-    form.widthAfterMm ?? null,
-    form.edgeCondition ?? null,
-    form.operatorRef ?? null,
-    form.remark ?? null]
-
-  );
-  if (row && form.coilInputId) {
-    await query(`UPDATE txn.prod_tm_coil_input SET edgemill_id = $2 WHERE id = $1`, [form.coilInputId, row.id]);
-  }
-  return row;
+  return withTransaction(async (client) => {
+    const row = await queryOne(
+      `INSERT INTO txn.prod_tm_edgemill (
+        tenant_id, run_id, coil_input_id, od, thk_mm, grade_code,
+        width_before_mm, width_after_mm, edge_condition, operator_ref, remark
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [
+      config.tenantId,
+      runId,
+      form.coilInputId ?? null,
+      form.od ?? null,
+      form.thkMm ?? null,
+      form.gradeCode ?? null,
+      form.widthBeforeMm ?? null,
+      form.widthAfterMm ?? null,
+      form.edgeCondition ?? null,
+      form.operatorRef ?? null,
+      form.remark ?? null],
+      client
+    );
+    if (row && form.coilInputId) {
+      await query(
+        `UPDATE txn.prod_tm_coil_input SET edgemill_id = $2 WHERE id = $1`,
+        [form.coilInputId, row.id],
+        client
+      );
+    }
+    return row;
+  });
 }
 
 export async function listEdgeMills(runId) {

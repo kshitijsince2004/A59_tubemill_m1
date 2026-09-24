@@ -16,6 +16,7 @@ import {
   requireAuth,
   requireProcessAccess,
   requireMachineHead,
+  requireMachineHeadOrOverride,
   requireWritable } from
 '../middleware/authMiddleware';
 
@@ -85,9 +86,12 @@ router.post('/swage/lots', requireWritable, withIdempotency, async (req, res) =>
 
 router.put('/swage/lots/:id', requireWritable, withIdempotency, async (req, res) => {
   try {
+    const id = paramId(req);
+    const existing = await getSwageLot(id);
+    if (!existing) return fail(res, 404, 'Not found');
     const parsed = drwSwageSchema.partial().parse(req.body);
-    const warnings = await assertValid('SWG', parsed);
-    ok(res, { ...(await updateSwageLot(paramId(req), parsed)), warnings });
+    const warnings = await assertValid('SWG', { ...existing, ...parsed });
+    ok(res, { ...(await updateSwageLot(id, parsed)), warnings });
   } catch (e) {
     failCaught(res, e, 'Update failed');
   }
@@ -101,7 +105,7 @@ router.post('/swage/lots/:id/submit', requireWritable, withIdempotency, async (r
   }
 });
 
-router.post('/swage/lots/:id/approve', requireMachineHead, withIdempotency, async (req, res) => {
+router.post('/swage/lots/:id/approve', requireMachineHeadOrOverride('APPROVE'), withIdempotency, async (req, res) => {
   try {
     const lot = await getSwageLot(paramId(req));
     if (!lot) return fail(res, 404, 'Not found');

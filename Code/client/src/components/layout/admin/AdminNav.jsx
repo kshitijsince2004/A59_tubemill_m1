@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { confirmDialog } from '../../ConfirmDialog';
 
 const ITEMS = [
   { to: '/admin/integrations', label: 'Integrations', end: false },
@@ -10,8 +11,10 @@ const ITEMS = [
 ];
 
 export default function AdminNav({ onLogout }) {
-  function handleLogout() {
-    if (window.confirm('Sign out of Admin?')) onLogout();
+  async function handleLogout() {
+    if (await confirmDialog({ title: 'Sign out', message: 'Sign out of Admin?', confirmLabel: 'Sign out' })) {
+      onLogout();
+    }
   }
 
   return (
@@ -40,7 +43,7 @@ export default function AdminNav({ onLogout }) {
           </NavLink>
         ))}
       </div>
-      <button type="button" className="admin-rail__link admin-rail__logout" onClick={handleLogout}>
+      <button type="button" className="admin-rail__link admin-rail__logout" onClick={() => void handleLogout()}>
         Sign out
       </button>
     </nav>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MachineHeadShell } from '../../components/layout/machinehead';
 import { getAccessToken } from '../../lib/authStore';
+import { getDevRoleOverride, tryRefreshSession } from '../../api/http';
 import { ZButton, ZInput, ZSelect } from '../../ui';
 
 const REPORTS = [
@@ -13,12 +14,24 @@ const REPORTS = [
 ];
 
 async function downloadXlsx(url, body) {
-  const headers = { 'Content-Type': 'application/json', 'st-auth-mode': 'header' };
-  const token = getAccessToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const role = localStorage.getItem('a59-role');
-  if (role) headers['x-app-role'] = role;
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  const buildHeaders = () => {
+    const headers = { 'Content-Type': 'application/json', 'st-auth-mode': 'header' };
+    const token = getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else {
+      const role = getDevRoleOverride() || localStorage.getItem('a59-role');
+      if (role) headers['x-app-role'] = role;
+    }
+    return headers;
+  };
+
+  let res = await fetch(url, { method: 'POST', headers: buildHeaders(), body: JSON.stringify(body) });
+  if (res.status === 401) {
+    const ok = await tryRefreshSession();
+    if (ok) {
+      res = await fetch(url, { method: 'POST', headers: buildHeaders(), body: JSON.stringify(body) });
+    }
+  }
   if (!res.ok) throw new Error(`Export failed (${res.status})`);
   const blob = await res.blob();
   const a = document.createElement('a');
@@ -69,6 +82,9 @@ export default function MachineDprExportPage({
         {msg ? <p className="mh-inline-msg">{msg}</p> : null}
         <section className="mh-panel">
           <h2 className="mh-panel__title">FT export</h2>
+          <p className="muted" style={{ marginBottom: 8 }}>
+            Footers prefer session crew (operator / shift in-charge) when a shift session exists for the machine.
+          </p>
           <div className="mh-form-grid">
             <label>
               Report

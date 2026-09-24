@@ -8,6 +8,8 @@ import {
 import {
   getPlantHeadDashboard,
   getPlantHeadBacklog,
+  getPlantHeadTrend,
+  getStageThroughput,
   getManagementDashboard,
   getDailyReport,
   getPlantHeadDrilldown,
@@ -43,6 +45,22 @@ router.get('/reports/plant-head/backlog', requirePlantReports, async (req, res) 
     ok(res, await getPlantHeadBacklog());
   } catch (e) {
     fail(res, 400, e instanceof Error ? e.message : 'Backlog failed');
+  }
+});
+
+router.get('/reports/plant-head/trend', requirePlantReports, async (req, res) => {
+  try {
+    ok(res, await getPlantHeadTrend(req.query.windowDays));
+  } catch (e) {
+    fail(res, 400, e instanceof Error ? e.message : 'Plant trend failed');
+  }
+});
+
+router.get('/reports/plant-head/stages', requirePlantReports, async (req, res) => {
+  try {
+    ok(res, await getStageThroughput(req.query.windowDays));
+  } catch (e) {
+    fail(res, 400, e instanceof Error ? e.message : 'Stage throughput failed');
   }
 });
 

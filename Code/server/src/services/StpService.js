@@ -1,4 +1,4 @@
-import { query, queryOne } from '../db/pool';
+import { query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 
 function mapLot(row) {
@@ -193,6 +193,20 @@ export async function createStpLot(input) {
       input.disposition ?? null,
     ]
   );
+  try {
+    const { activeShiftLogId } = await import('./handover/productionGuard.js');
+    const sid = await activeShiftLogId(input.machineCode ?? 'STP-LINE');
+    if (sid && row?.id) {
+      await query(`UPDATE txn.prod_stp_lot SET shift_log_id = $1 WHERE id = $2 AND tenant_id = $3`, [
+        sid,
+        row.id,
+        config.tenantId,
+      ]);
+      row.shift_log_id = sid;
+    }
+  } catch {
+    /* best-effort */
+  }
   return mapLot(row);
 }
 
@@ -556,13 +570,16 @@ export async function startStpProduction(id) {
   );
   if (openStop) throw new Error('End open stoppage before Start');
 
-  const row = await queryOne(
-    `UPDATE txn.prod_stp_lot SET production_started_at = now(), updated_at = now()
-     WHERE id = $1 AND tenant_id = $2 RETURNING *`,
-    [id, config.tenantId]
-  );
-  await ensureStpStages(id, { activateFirst: true });
-  return mapLot(row);
+  return withTransaction(async (client) => {
+    const row = await queryOne(
+      `UPDATE txn.prod_stp_lot SET production_started_at = now(), updated_at = now()
+       WHERE id = $1 AND tenant_id = $2 RETURNING *`,
+      [id, config.tenantId],
+      client
+    );
+    await ensureStpStages(id, { activateFirst: true }, client);
+    return mapLot(row);
+  });
 }
 
 export async function endStpProduction(id) {
@@ -575,19 +592,22 @@ export async function endStpProduction(id) {
   if (!existing.production_started_at) throw new Error('Start production before End');
   if (existing.production_ended_at) return mapLot(existing);
 
-  try {
-    const { closeProcessStoppage } = await import('./ProcessStoppageService.js');
-    await closeProcessStoppage('STP', id);
-  } catch {
-    /* no open stoppage */
-  }
+  return withTransaction(async (client) => {
+    try {
+      const { closeProcessStoppage } = await import('./ProcessStoppageService.js');
+      await closeProcessStoppage('STP', id, client);
+    } catch {
+      /* no open stoppage */
+    }
 
-  const row = await queryOne(
-    `UPDATE txn.prod_stp_lot SET production_ended_at = now(), updated_at = now()
-     WHERE id = $1 AND tenant_id = $2 RETURNING *`,
-    [id, config.tenantId]
-  );
-  return mapLot(row);
+    const row = await queryOne(
+      `UPDATE txn.prod_stp_lot SET production_ended_at = now(), updated_at = now()
+       WHERE id = $1 AND tenant_id = $2 RETURNING *`,
+      [id, config.tenantId],
+      client
+    );
+    return mapLot(row);
+  });
 }
 
 export async function holdStpLot(id) {
@@ -809,17 +829,18 @@ function mapStage(row) {
   };
 }
 
-export async function listStpStages(lotId) {
+export async function listStpStages(lotId, client) {
   const lot = await queryOne(`SELECT id FROM txn.prod_stp_lot WHERE id = $1 AND tenant_id = $2`, [
     lotId,
     config.tenantId,
-  ]);
+  ], client);
   if (!lot) throw new Error('STP lot not found');
   const rows = await query(
     `SELECT * FROM txn.stp_process_stage
      WHERE lot_id = $1 AND tenant_id = $2
      ORDER BY sort_ord ASC`,
-    [lotId, config.tenantId]
+    [lotId, config.tenantId],
+    client
   );
   return rows.map(mapStage);
 }
@@ -828,66 +849,76 @@ export async function listStpStages(lotId) {
  * Idempotent: create stage rows for a lot. Optionally activate first non-NA PENDING
  * when production has started and nothing is ACTIVE.
  */
-export async function ensureStpStages(lotId, opts = {}) {
-  const lot = await queryOne(`SELECT * FROM txn.prod_stp_lot WHERE id = $1 AND tenant_id = $2`, [
-    lotId,
-    config.tenantId,
-  ]);
-  if (!lot) throw new Error('STP lot not found');
+export async function ensureStpStages(lotId, opts = {}, client) {
+  const run = async (c) => {
+    const lot = await queryOne(`SELECT * FROM txn.prod_stp_lot WHERE id = $1 AND tenant_id = $2`, [
+      lotId,
+      config.tenantId,
+    ], c);
+    if (!lot) throw new Error('STP lot not found');
 
-  for (const def of STP_STAGE_DEFS) {
-    await queryOne(
-      `INSERT INTO txn.stp_process_stage (
-         tenant_id, lot_id, stage_code, sort_ord, status
-       ) VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (lot_id, stage_code) DO NOTHING
-       RETURNING id`,
-      [config.tenantId, lotId, def.code, def.sortOrd, def.na ? 'NA' : 'PENDING']
-    );
-  }
-
-  const activateFirst = opts.activateFirst !== false && !!lot.production_started_at && !lot.production_ended_at;
-  if (activateFirst) {
-    const active = await queryOne(
-      `SELECT id FROM txn.stp_process_stage
-       WHERE lot_id = $1 AND tenant_id = $2 AND status = 'ACTIVE' LIMIT 1`,
-      [lotId, config.tenantId]
-    );
-    if (!active) {
-      const first = await queryOne(
-        `SELECT * FROM txn.stp_process_stage
-         WHERE lot_id = $1 AND tenant_id = $2 AND status = 'PENDING'
-         ORDER BY sort_ord ASC LIMIT 1`,
-        [lotId, config.tenantId]
+    for (const def of STP_STAGE_DEFS) {
+      await queryOne(
+        `INSERT INTO txn.stp_process_stage (
+           tenant_id, lot_id, stage_code, sort_ord, status
+         ) VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (lot_id, stage_code) DO NOTHING
+         RETURNING id`,
+        [config.tenantId, lotId, def.code, def.sortOrd, def.na ? 'NA' : 'PENDING'],
+        c
       );
-      if (first) {
-        await queryOne(
-          `UPDATE txn.stp_process_stage
-           SET status = 'ACTIVE', started_at = COALESCE(started_at, now()), updated_at = now()
-           WHERE id = $1 RETURNING *`,
-          [first.id]
+    }
+
+    const activateFirst = opts.activateFirst !== false && !!lot.production_started_at && !lot.production_ended_at;
+    if (activateFirst) {
+      const active = await queryOne(
+        `SELECT id FROM txn.stp_process_stage
+         WHERE lot_id = $1 AND tenant_id = $2 AND status = 'ACTIVE' LIMIT 1`,
+        [lotId, config.tenantId],
+        c
+      );
+      if (!active) {
+        const first = await queryOne(
+          `SELECT * FROM txn.stp_process_stage
+           WHERE lot_id = $1 AND tenant_id = $2 AND status = 'PENDING'
+           ORDER BY sort_ord ASC LIMIT 1`,
+          [lotId, config.tenantId],
+          c
         );
+        if (first) {
+          await queryOne(
+            `UPDATE txn.stp_process_stage
+             SET status = 'ACTIVE', started_at = COALESCE(started_at, now()), updated_at = now()
+             WHERE id = $1 RETURNING *`,
+            [first.id],
+            c
+          );
+        }
       }
     }
-  }
 
-  return listStpStages(lotId);
+    return listStpStages(lotId, c);
+  };
+
+  if (client) return run(client);
+  return withTransaction(run);
 }
 
-async function autoFillStageTime(lotId, stageCode, durationMin) {
+async function autoFillStageTime(lotId, stageCode, durationMin, client) {
   const def = STP_STAGE_DEFS.find((d) => d.code === stageCode);
   if (!def?.timeField || durationMin == null) return;
   const lot = await queryOne(`SELECT * FROM txn.prod_stp_lot WHERE id = $1 AND tenant_id = $2`, [
     lotId,
     config.tenantId,
-  ]);
+  ], client);
   if (!lot) return;
   const current = lot[def.timeField];
   if (current != null) return;
   await queryOne(
     `UPDATE txn.prod_stp_lot SET ${def.timeField} = $3, updated_at = now()
      WHERE id = $1 AND tenant_id = $2 RETURNING id`,
-    [lotId, config.tenantId, durationMin]
+    [lotId, config.tenantId, durationMin],
+    client
   );
 }
 
@@ -912,43 +943,49 @@ export async function advanceStpStage(lotId) {
   );
   if (openStop) throw new Error('End open stoppage before advancing');
 
-  await ensureStpStages(lotId, { activateFirst: true });
+  await withTransaction(async (client) => {
+    await ensureStpStages(lotId, { activateFirst: true }, client);
 
-  const active = await queryOne(
-    `SELECT * FROM txn.stp_process_stage
-     WHERE lot_id = $1 AND tenant_id = $2 AND status = 'ACTIVE'
-     ORDER BY sort_ord ASC LIMIT 1`,
-    [lotId, config.tenantId]
-  );
-  if (!active) throw new Error('No active stage to advance');
+    const active = await queryOne(
+      `SELECT * FROM txn.stp_process_stage
+       WHERE lot_id = $1 AND tenant_id = $2 AND status = 'ACTIVE'
+       ORDER BY sort_ord ASC LIMIT 1`,
+      [lotId, config.tenantId],
+      client
+    );
+    if (!active) throw new Error('No active stage to advance');
 
-  const endedAt = new Date();
-  const started = active.started_at ? new Date(active.started_at) : endedAt;
-  const durationMin = Math.max(0, (endedAt.getTime() - started.getTime()) / 60000);
-  const durationRounded = Math.round(durationMin * 1000) / 1000;
+    const endedAt = new Date();
+    const started = active.started_at ? new Date(active.started_at) : endedAt;
+    const durationMin = Math.max(0, (endedAt.getTime() - started.getTime()) / 60000);
+    const durationRounded = Math.round(durationMin * 1000) / 1000;
 
-  await queryOne(
-    `UPDATE txn.stp_process_stage
-     SET status = 'COMPLETE', ended_at = $2, duration_min = $3, updated_at = now()
-     WHERE id = $1 RETURNING *`,
-    [active.id, endedAt.toISOString(), durationRounded]
-  );
-  await autoFillStageTime(lotId, active.stage_code, durationRounded);
-
-  const next = await queryOne(
-    `SELECT * FROM txn.stp_process_stage
-     WHERE lot_id = $1 AND tenant_id = $2 AND status = 'PENDING'
-     ORDER BY sort_ord ASC LIMIT 1`,
-    [lotId, config.tenantId]
-  );
-  if (next) {
     await queryOne(
       `UPDATE txn.stp_process_stage
-       SET status = 'ACTIVE', started_at = now(), updated_at = now()
+       SET status = 'COMPLETE', ended_at = $2, duration_min = $3, updated_at = now()
        WHERE id = $1 RETURNING *`,
-      [next.id]
+      [active.id, endedAt.toISOString(), durationRounded],
+      client
     );
-  }
+    await autoFillStageTime(lotId, active.stage_code, durationRounded, client);
+
+    const next = await queryOne(
+      `SELECT * FROM txn.stp_process_stage
+       WHERE lot_id = $1 AND tenant_id = $2 AND status = 'PENDING'
+       ORDER BY sort_ord ASC LIMIT 1`,
+      [lotId, config.tenantId],
+      client
+    );
+    if (next) {
+      await queryOne(
+        `UPDATE txn.stp_process_stage
+         SET status = 'ACTIVE', started_at = now(), updated_at = now()
+         WHERE id = $1 RETURNING *`,
+        [next.id],
+        client
+      );
+    }
+  });
 
   const stages = await listStpStages(lotId);
   const updatedLot = await getStpLot(lotId);

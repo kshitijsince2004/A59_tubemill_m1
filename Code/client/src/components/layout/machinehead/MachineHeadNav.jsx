@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { confirmDialog } from '../../ConfirmDialog';
 
 const ITEMS = [
   { to: '/machine-head-dashboard', label: 'Desk', end: true },
@@ -11,8 +12,16 @@ const ITEMS = [
 ];
 
 export default function MachineHeadNav({ onLogout }) {
-  function handleLogout() {
-    if (window.confirm('Sign out of Machine Head desk?')) onLogout();
+  async function handleLogout() {
+    if (
+      await confirmDialog({
+        title: 'Sign out',
+        message: 'Sign out of Machine Head desk?',
+        confirmLabel: 'Sign out',
+      })
+    ) {
+      onLogout();
+    }
   }
 
   return (
@@ -42,7 +51,7 @@ export default function MachineHeadNav({ onLogout }) {
           </NavLink>
         ))}
       </div>
-      <button type="button" className="mh-rail__link mh-rail__logout" onClick={handleLogout}>
+      <button type="button" className="mh-rail__link mh-rail__logout" onClick={() => void handleLogout()}>
         Sign out
       </button>
     </nav>

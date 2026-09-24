@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import { promisify } from 'util';
-import { config } from '../config';
 
 const scryptAsync = promisify(crypto.scrypt);
 
@@ -21,10 +20,8 @@ export async function hashPin(pin) {
 }
 
 export async function verifyPin(pin, pinHash) {
+  // No hash → deny. Never accept well-known PINs for hash-less accounts.
   if (!pinHash) {
-    if (!config.authStrict) {
-      return pin === '0000' || pin === '1234';
-    }
     return false;
   }
   const parts = pinHash.split('$');
