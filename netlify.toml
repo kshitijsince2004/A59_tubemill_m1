@@ -1,12 +1,13 @@
 # Netlify deploys from the Code/ workspace (not the repo root).
+# Schema SQL lives in netlify/database/sql and is applied in build.command
+# (platform auto-migrator was hanging after "Database snapshot created").
 [build]
   base = "Code"
-  command = "node -e \"console.log('[build] NETLIFY_DB_URL', process.env.NETLIFY_DB_URL ? 'SET' : 'MISSING'); console.log('[build] CONTEXT', process.env.CONTEXT || 'none')\" && npm install && npm run build -w shared && npm run build -w client"
+  command = "node -e \"console.log('[build] NETLIFY_DB_URL', process.env.NETLIFY_DB_URL ? 'SET' : 'MISSING'); console.log('[build] CONTEXT', process.env.CONTEXT || 'none')\" && npm install && node netlify/database/apply-sql.mjs && npm run build -w shared && npm run build -w client"
   publish = "client/dist"
 
 [build.environment]
   VITE_SHOW_DEMO_LOGIN = "true"
-
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"

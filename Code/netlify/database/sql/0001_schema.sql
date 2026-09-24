@@ -1,6 +1,8 @@
 -- Fresh-schema migration for Netlify Database (no m1_app role, no demo→ops rename).
 -- Consolidates server/migrations 001–006 into a single bootstrap for managed Postgres.
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE SCHEMA IF NOT EXISTS master;
 CREATE SCHEMA IF NOT EXISTS txn;
 CREATE SCHEMA IF NOT EXISTS plc;

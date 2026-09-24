@@ -46,6 +46,7 @@ const NETLIFY_ONLY_ALLOWLIST = new Set([
   'fifty_queue_orders',
   'phase1_reference',
   'demo_seed_logins_orders_graphs',
+  'platform_noop',
 ]);
 
 function listSuffixNames(dir) {
@@ -60,7 +61,11 @@ function listSuffixNames(dir) {
 }
 
 const serverNames = listSuffixNames(serverDir);
-const netlifyNames = listSuffixNames(netlifyDir);
+// Prefer sql/ (applied in build); fall back to migrations/ for older checkouts.
+const netlifySqlDir = path.resolve(__dirname, '../../netlify/database/sql');
+const netlifyNames = listSuffixNames(
+  fs.existsSync(netlifySqlDir) ? netlifySqlDir : netlifyDir
+);
 const netlifySet = new Set(netlifyNames);
 
 const missing = serverNames.filter(
