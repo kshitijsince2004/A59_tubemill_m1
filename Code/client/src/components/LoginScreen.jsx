@@ -7,8 +7,9 @@ import { setAccessToken, setStoredUser, clearAuth, getAccessToken } from '../lib
 import { initSuperTokensClient, signOutSession, staffSignIn, syncAccessTokenFromSession } from '../lib/supertokens';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 
-/** Demo seed badges — local/dev only; all use PIN 1234. */
-const SHOW_DEMO_CHIPS = import.meta.env.DEV;
+/** Demo seed badges — local/dev and Netlify demo (`VITE_SHOW_DEMO_LOGIN=true`); PIN 1234. */
+const SHOW_DEMO_CHIPS =
+  import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGIN === 'true';
 const DEMO_BADGE_PIN = '1234';
 const DEMO_BADGES = [
   { badge: 'OP-A59', label: 'TM op' },

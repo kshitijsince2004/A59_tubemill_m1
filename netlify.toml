@@ -4,6 +4,9 @@
   command = "node -e \"console.log('[build] NETLIFY_DB_URL', process.env.NETLIFY_DB_URL ? 'SET' : 'MISSING'); console.log('[build] CONTEXT', process.env.CONTEXT || 'none')\" && npm install && npm run build -w shared && npm run build -w client"
   publish = "client/dist"
 
+[build.environment]
+  VITE_SHOW_DEMO_LOGIN = "true"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"

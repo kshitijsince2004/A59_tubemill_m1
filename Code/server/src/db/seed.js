@@ -414,7 +414,7 @@ async function seed() {
       );
     }
 
-    // Sample furnace / STP / draw lots for demo
+    // Sample furnace / STP / draw lots for demo (open + multi-day history for MH/PH graphs)
     await client.query(
       `INSERT INTO txn.prod_ann_run (
          tenant_id, charge_no, furnace_code, customer_code, grade_code, work_order_no, size,
@@ -447,6 +447,219 @@ async function seed() {
        ) VALUES (
          $1,'DB-DEMO-001','WO-DRW-001','TATA','1010','{"odMm":31.8,"thkMm":1.6}','DB-40T','1ST',
          '{"odMm":38.1,"thkMm":2.0}','{"odMm":31.8,"thkMm":1.6}','INTER',80,2,'DRAFT','MANUAL',CURRENT_DATE,'A'
+       )`,
+      [tenantId]
+    );
+
+    // 7-day production / stoppage / defect history so MH + PH charts have series
+    const stopCodes = ['TM-01', 'TM-02', 'TM-03', 'TM-06'];
+    const defectCodes = ['D-JOINT', 'D-SEAM', 'D-DIM', 'D-SCRAP'];
+    const furnaces = ['RHF-03', 'RHF-04', 'RHF-05'];
+    const graphBenches = benches.filter((b) => !b.code.startsWith('SWG')).map((b) => b.code);
+
+    for (let d = 0; d < 7; d++) {
+      const dayOffset = 6 - d;
+      const runNo = `TM-DEMO-D${d}`;
+      const runIns = await client.query(
+        `INSERT INTO txn.prod_tm_run (
+           tenant_id, run_no, mill_code, work_order_no, bc_batch_number, customer_code, grade_code,
+           size, size_key, source_tag, run_state, first_off_status, time_from, time_to,
+           raw_material_mt, total_prime_mt, total_scrap_mt, yield_pct, status, hold_status,
+           created_at, created_by
+         ) VALUES (
+           $1,$2,'A-59','WO-DEMO-A-59','BC-DEMO-A59','TATA','1010',
+           '{"profile":"ROUND","odMm":38.1,"thkMm":2.0,"lengthMm":6000}'::jsonb,'OD38.1','SEED',
+           'COMPLETE','APPROVED',
+           (date_trunc('day', now()) - ($3 || ' days')::interval + interval '10 hours'),
+           (date_trunc('day', now()) - ($3 || ' days')::interval + interval '16 hours'),
+           $4,$5,$6,$7,'CLOSED','NONE',
+           (date_trunc('day', now()) - ($3 || ' days')::interval + interval '10 hours'),
+           'seed'
+         ) RETURNING id`,
+        [
+          tenantId,
+          runNo,
+          String(dayOffset),
+          12 + d,
+          11 + d * 0.8,
+          0.4 + d * 0.05,
+          Math.round(((11 + d * 0.8) / (12 + d)) * 1000) / 10,
+        ]
+      );
+      const runId = runIns.rows[0].id;
+      await client.query(
+        `INSERT INTO txn.stoppage_entry (
+           tenant_id, run_id, mill_code, stoppage_code, category, from_time, to_time,
+           duration_min, reason, is_planned, is_open, process_code, source_id, created_at
+         ) VALUES (
+           $1,$2,'A-59',$3,'MECH',
+           (date_trunc('day', now()) - ($4 || ' days')::interval + interval '12 hours'),
+           (date_trunc('day', now()) - ($4 || ' days')::interval + interval '12 hours 25 minutes'),
+           $5,$6,false,false,'TM',$2,
+           (date_trunc('day', now()) - ($4 || ' days')::interval + interval '10 hours')
+         )`,
+        [
+          tenantId,
+          runId,
+          stopCodes[d % stopCodes.length],
+          String(dayOffset),
+          25 + d,
+          `Demo stoppage day ${d}`,
+        ]
+      );
+      await client.query(
+        `INSERT INTO txn.tm_defect (
+           tenant_id, run_id, defect_code, quantity_mt, pieces, remark, created_by, created_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,'seed',
+           (date_trunc('day', now()) - ($7 || ' days')::interval + interval '10 hours')
+         )`,
+        [
+          tenantId,
+          runId,
+          defectCodes[d % defectCodes.length],
+          0.05 + d * 0.01,
+          2 + d,
+          `Demo defect day ${d}`,
+          String(dayOffset),
+        ]
+      );
+
+      try {
+        for (let h = 0; h < 4; h++) {
+          await client.query(
+            `INSERT INTO txn.tm_param_reading (
+               tenant_id, mill_code, ts_hour, line_speed_mpm, weld_power_kw, in_band, source
+             ) VALUES (
+               $1,'A-59',
+               (date_trunc('day', now()) - ($2 || ' days')::interval + interval '10 hours' + ($3 || ' hours')::interval),
+               $4,$5,true,'SEED'
+             )
+             ON CONFLICT DO NOTHING`,
+            [tenantId, String(dayOffset), String(h), 42 + d + h, 100 + d]
+          );
+        }
+      } catch {
+        /* tm_param_reading may be missing on older DBs */
+      }
+
+      for (const furnace of furnaces) {
+        await client.query(
+          `INSERT INTO txn.prod_ann_run (
+             tenant_id, charge_no, furnace_code, customer_code, grade_code, work_order_no, size,
+             tube_count, ht_type,
+             zone1_min_c, zone1_max_c, zone2_min_c, zone2_max_c, zone3_min_c, zone3_max_c,
+             zone4_min_c, zone4_max_c, zone5_min_c, zone5_max_c, zone6_min_c, zone6_max_c,
+             line_speed_mhr, total_mt, qty_mt, qty_nos, status, data_source, prod_date, shift_ref,
+             created_at, updated_at
+           ) VALUES (
+             $1,$2,$3,'TATA','1010',$4,'{"odMm":38.1,"thkMm":2.0}'::jsonb,
+             $5,'ANNEAL',880,900,900,920,920,940,940,960,960,980,980,1000,
+             $6,$7,$7,$5,$8,'SEED',
+             (CURRENT_DATE - ($9 || ' days')::interval)::date,'A',
+             (date_trunc('day', now()) - ($9 || ' days')::interval + interval '10 hours'),
+             (date_trunc('day', now()) - ($9 || ' days')::interval + interval '10 hours')
+           )`,
+          [
+            tenantId,
+            `FUR-DEMO-${furnace}-D${d}`,
+            furnace,
+            `WO-DEMO-${furnace}`,
+            100 + d * 10,
+            20 + d,
+            3.5 + d * 0.4,
+            d === 6 ? 'SUBMITTED' : 'CLOSED',
+            String(dayOffset),
+          ]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO txn.prod_stp_lot (
+           tenant_id, lot_no, customer_code, grade_code, work_order_no, size, qty_no, qty_mt,
+           machine_code, degrease_temp_c, phosphate_temp_c, status, data_source, prod_date, shift_ref,
+           created_at, updated_at
+         ) VALUES (
+           $1,$2,'JINDAL','1010','WO-DEMO-STP-LINE','{"odMm":38.1,"thkMm":2.0}'::jsonb,
+           $3,$4,'STP-LINE',70,80,$5,'SEED',
+           (CURRENT_DATE - ($6 || ' days')::interval)::date,'A',
+           (date_trunc('day', now()) - ($6 || ' days')::interval + interval '10 hours'),
+           (date_trunc('day', now()) - ($6 || ' days')::interval + interval '10 hours')
+         )`,
+        [
+          tenantId,
+          `STP-DEMO-D${d}`,
+          80 + d * 5,
+          1.1 + d * 0.15,
+          d === 6 ? 'SUBMITTED' : 'CLOSED',
+          String(dayOffset),
+        ]
+      );
+
+      for (const bench of graphBenches) {
+        await client.query(
+          `INSERT INTO txn.prod_db_lot (
+             tenant_id, lot_no, work_order_no, customer_code, grade_code, size, bench_code, draw_pass,
+             from_size, to_size, stage, accepted_pcs, rejected_pcs, accepted_mt, status, data_source,
+             prod_date, shift_ref, created_at, updated_at
+           ) VALUES (
+             $1,$2,$3,'AMNS','1010','{"odMm":31.8,"thkMm":1.6}'::jsonb,$4,'1ST',
+             '{"odMm":38.1,"thkMm":2.0}'::jsonb,'{"odMm":31.8,"thkMm":1.6}'::jsonb,
+             'INTER',$5,$6,$7,$8,'SEED',
+             (CURRENT_DATE - ($9 || ' days')::interval)::date,'A',
+             (date_trunc('day', now()) - ($9 || ' days')::interval + interval '10 hours'),
+             (date_trunc('day', now()) - ($9 || ' days')::interval + interval '10 hours')
+           )`,
+          [
+            tenantId,
+            `DB-DEMO-${bench}-D${d}`,
+            `WO-DEMO-${bench}`,
+            bench,
+            60 + d * 5,
+            1 + (d % 3),
+            0.8 + d * 0.1,
+            d === 6 && bench === 'DB-10T' ? 'SUBMITTED' : 'CLOSED',
+            String(dayOffset),
+          ]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO txn.prod_db_swage (
+           tenant_id, lot_no, swg_machine, work_order_no, customer_code, grade_code, size,
+           pieces, status, data_source, prod_date, shift_ref, created_at
+         ) VALUES (
+           $1,$2,'SWG-01','WO-DEMO-SWG-01','TATA','1010','{"odMm":31.8,"thkMm":1.6}'::jsonb,
+           $3,'CLOSED','SEED',
+           (CURRENT_DATE - ($4 || ' days')::interval)::date,'A',
+           (date_trunc('day', now()) - ($4 || ' days')::interval + interval '10 hours')
+         )`,
+        [tenantId, `SWG-DEMO-D${d}`, 40 + d, String(dayOffset)]
+      );
+    }
+
+    await client.query(
+      `INSERT INTO txn.prod_tm_run (
+         tenant_id, run_no, mill_code, work_order_no, customer_code, grade_code,
+         size, size_key, source_tag, run_state, status, hold_status, created_at, created_by,
+         raw_material_mt, total_prime_mt
+       ) VALUES (
+         $1,'TM-DEMO-OPEN','A-59','WO-DEMO-A-59','TATA','1010',
+         '{"profile":"ROUND","odMm":25.4,"thkMm":2.6}'::jsonb,'OD25.4','SEED',
+         'RUNNING','OPEN','NONE', now() - interval '90 minutes','seed', 2.0, 0
+       )`,
+      [tenantId]
+    );
+
+    await client.query(
+      `INSERT INTO txn.prod_ann_run (
+         tenant_id, charge_no, furnace_code, customer_code, grade_code, work_order_no, size,
+         tube_count, ht_type, line_speed_mhr, total_mt, status, data_source, prod_date, shift_ref,
+         created_at, updated_at
+       ) VALUES (
+         $1,'FUR-DEMO-LIVE','RHF-03','TATA','1010','WO-DEMO-RHF-03',
+         '{"odMm":38.1,"thkMm":2.0}'::jsonb,90,'ANNEAL',21.5,2.2,'IN_PROGRESS','SEED',
+         CURRENT_DATE,'A', now() - interval '2 hours', now()
        )`,
       [tenantId]
     );
@@ -735,6 +948,50 @@ async function seed() {
       }
     }
     console.log(`Seeded ${releasedOrders.length} Released work order(s) with lines`);
+
+    // One Released WO per machine so every process picker has a demo order
+    for (const m of machineRows.rows) {
+      const wo = `WO-DEMO-${m.machine_code}`;
+      await client.query(
+        `INSERT INTO erp.released_order (
+           tenant_id, bc_id, work_order_no, status, mill_code, customer_code, grade_code,
+           lot_no, size, qty_pieces, planned_qty, source, payload, updated_at
+         ) VALUES ($1,$2,$3,'Released',$4,'TATA','1010',$5,$6,$7,$8,'SEED',$9, now())
+         ON CONFLICT (tenant_id, work_order_no) DO UPDATE SET
+           status = 'Released', mill_code = EXCLUDED.mill_code, updated_at = now()`,
+        [
+          tenantId,
+          `PO-DEMO-${m.machine_code}`,
+          wo,
+          m.machine_code,
+          `LOT-DEMO-${m.machine_code}`,
+          JSON.stringify({ profile: 'ROUND', odMm: 38.1, equivOdMm: 38.1, thkMm: 2.0, lengthMm: 6000 }),
+          250,
+          2.5,
+          JSON.stringify({ machine: m.machine_code, process: m.process_code }),
+        ]
+      );
+      try {
+        await client.query(
+          `INSERT INTO erp.released_order_line (
+             tenant_id, work_order_no, line_no, customer_code, grade_code, lot_no, coil_no,
+             size, qty_pieces, planned_qty, tube_shape, remarks, payload
+           ) VALUES ($1,$2,1,'TATA','1010',$3,$4,$5,250,2.5,'ROUND',$6,'{}'::jsonb)
+           ON CONFLICT (tenant_id, work_order_no, line_no) DO NOTHING`,
+          [
+            tenantId,
+            wo,
+            `LOT-DEMO-${m.machine_code}`,
+            `COIL-DEMO-${m.machine_code}`,
+            JSON.stringify({ profile: 'ROUND', odMm: 38.1, thkMm: 2.0, lengthMm: 6000 }),
+            `Demo line for ${m.machine_code}`,
+          ]
+        );
+      } catch {
+        /* released_order_line optional on older DBs */
+      }
+    }
+    console.log(`Seeded demo WO for ${machineRows.rows.length} machine(s)`);
 
     try {
       const { seedDefaultQualitySpecs } = await import('../services/QualitySpecService.js');

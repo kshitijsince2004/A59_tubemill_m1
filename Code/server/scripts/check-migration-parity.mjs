@@ -45,6 +45,7 @@ const NETLIFY_ONLY_ALLOWLIST = new Set([
   'reference_data',
   'fifty_queue_orders',
   'phase1_reference',
+  'demo_seed_logins_orders_graphs',
 ]);
 
 function listSuffixNames(dir) {
