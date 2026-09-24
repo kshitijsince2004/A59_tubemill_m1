@@ -93,11 +93,9 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Drop obsolete stub benches not in Table-C workbook
-  DELETE FROM master.db_bench_capability
-  WHERE tenant_id = tid AND bench_code IN ('DB-25T','DB-60T','DB-100T','DB-150T');
-  DELETE FROM master.machine
-  WHERE tenant_id = tid AND machine_code IN ('DB-25T','DB-60T','DB-100T','DB-150T');
+  -- Do not DELETE stub benches here: seed/demo rows (e.g. prod_db_lot → DB-60T)
+  -- and security.machine_access still reference master.machine. Stub removal with
+  -- FK remaps lives in 0024_drawbench_drop_stub_benches.sql.
 
   -- Ensure workbook bench machines exist
   INSERT INTO master.machine (machine_code, tenant_id, label, process_code)
