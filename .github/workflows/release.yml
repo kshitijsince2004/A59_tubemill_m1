@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.4.2)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Code
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Code/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Version meta
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=zedral-m1-$V" >> "$GITHUB_OUTPUT"
+
+      - name: Pack release zip
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          V="${{ steps.meta.outputs.version }}"
+          STAGE="staging/zedral-m1-$V"
+          mkdir -p "$STAGE/server" "$STAGE/client" "$STAGE/shared"
+          # Production runtime: workspace install already present after npm ci + build
+          cp Code/package.json "$STAGE/package.json"
+          cp Code/package-lock.json "$STAGE/package-lock.json"
+          cp -r Code/node_modules "$STAGE/node_modules"
+          cp -r Code/server/dist "$STAGE/server/dist"
+          cp -r Code/server/migrations "$STAGE/server/migrations"
+          cp Code/server/package.json "$STAGE/server/package.json"
+          cp -r Code/shared "$STAGE/shared"
+          cp -r Code/client/dist "$STAGE/client/dist"
+          cp -r deploy/windows "$STAGE/deploy-windows"
+          printf '%s\n' "$V" > "$STAGE/VERSION"
+          mkdir -p dist
+          (cd staging && zip -r "../dist/zedral-m1-$V.zip" "zedral-m1-$V")
+          (cd dist && sha256sum "zedral-m1-$V.zip" > "zedral-m1-$V.zip.sha256")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: |
+            dist/zedral-m1-*.zip
+            dist/zedral-m1-*.zip.sha256
+          if-no-files-found: error
+
+  publish-uat:
+    needs: build-artifact
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-artifact.outputs.artifact_name }}
+          path: dist
+
+      - name: Publish UAT approved manifest
+        shell: bash
+        run: |
+          V="${{ needs.build-artifact.outputs.version }}"
+          ZIP="dist/zedral-m1-$V.zip"
+          SHA=$(cut -d' ' -f1 "dist/zedral-m1-$V.zip.sha256")
+          # Upload as GitHub Release asset when tag-driven; for workflow_dispatch attach via softprops if token allows.
+          mkdir -p out
+          cat > "out/approved-uat.json" <<EOF
+          {
+            "version": "$V",
+            "environment": "uat",
+            "url": "${{ github.server_url }}/${{ github.repository }}/releases/download/v$V/zedral-m1-$V.zip",
+            "sha256": "$SHA"
+          }
+          EOF
+          cat out/approved-uat.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: approved-uat-${{ needs.build-artifact.outputs.version }}
+          path: out/approved-uat.json
+
+      - name: Create GitHub Release (tag pushes)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/zedral-m1-*.zip
+            dist/zedral-m1-*.zip.sha256
+            out/approved-uat.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  approve-production:
+    needs: [build-artifact, publish-uat]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-artifact.outputs.artifact_name }}
+          path: dist
+
+      - name: Write production approved manifest
+        shell: bash
+        run: |
+          V="${{ needs.build-artifact.outputs.version }}"
+          SHA=$(cut -d' ' -f1 "dist/zedral-m1-$V.zip.sha256")
+          mkdir -p out
+          cat > "out/approved.json" <<EOF
+          {
+            "version": "$V",
+            "environment": "production",
+            "url": "${{ github.server_url }}/${{ github.repository }}/releases/download/v$V/zedral-m1-$V.zip",
+            "sha256": "$SHA",
+            "approved_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat out/approved.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: approved-production-${{ needs.build-artifact.outputs.version }}
+          path: out/approved.json
+
+      - name: Attach production manifest to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/approved.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

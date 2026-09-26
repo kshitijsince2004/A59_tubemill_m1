@@ -3,6 +3,7 @@ import { ROLE_RANK } from '@a59/shared';
 import { config } from '../config';
 import { Session } from '../config/authConfig';
 import { loadGrantsBySuperTokensUserId, loadGrantsByUserId, verifyOverrideToken } from '../services/authService';
+import { isA59SessionToken, verifySessionToken } from '../services/sessionTokenService';
 
 const VALID_ROLES = ['OPERATOR', 'MACHINE_HEAD', 'PLANT_HEAD', 'ADMIN'];
 
@@ -124,7 +125,8 @@ async function hydrateFromHeader(req) {
 }
 
 /**
- * Prefer SuperTokens session; fall back to header/static only when allowed.
+ * Prefer SuperTokens session; else HMAC demo session (Netlify without ST Core);
+ * fall back to header/static only when allowed.
  * Expired access tokens throw TRY_REFRESH_TOKEN — let the ST error handler
  * tell the client to refresh (do not swallow into anonymous).
  */
@@ -179,6 +181,22 @@ export async function authMiddleware(req, res, next) {
         // Session token present but no app grants — treat as anonymous so
         // public probes (e.g. /tubemill/session) still work; requireAuth 401s later.
       }
+    } else if (config.demoSessionsEnabled) {
+      const auth = req.header('authorization') || '';
+      const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+      if (bearer && isA59SessionToken(bearer)) {
+        const payload = verifySessionToken(bearer, 'access');
+        if (payload?.sub) {
+          const user = await loadGrantsByUserId(payload.sub);
+          if (user) {
+            authed.user = user;
+            authed.appRole = user.primaryRole;
+            authed.accessTokenPayload = payload;
+            next();
+            return;
+          }
+        }
+      }
     }
 
     const ok = await hydrateFromHeader(authed);
@@ -199,6 +217,27 @@ export function requireAuth(req, res, next) {
   const authed = req;
   if (!authed.user) {
     res.status(401).json({ data: null, errors: [{ message: 'Unauthenticated' }] });
+    return;
+  }
+  next();
+}
+
+/** Operator tablet / floor APIs — OPERATOR only (not Machine Head and above). */
+export function requireOperator(req, res, next) {
+  const authed = req;
+  if (!authed.user) {
+    res.status(401).json({ data: null, errors: [{ message: 'Unauthenticated' }] });
+    return;
+  }
+  const role = authed.appRole ?? authed.user.primaryRole ?? 'OPERATOR';
+  const isOperator =
+    role === 'OPERATOR' &&
+    !authed.user.roles?.some((r) => r === 'MACHINE_HEAD' || r === 'PLANT_HEAD' || r === 'ADMIN');
+  if (!isOperator) {
+    res.status(403).json({
+      data: null,
+      errors: [{ message: 'This account is not permitted to use this application.' }],
+    });
     return;
   }
   next();

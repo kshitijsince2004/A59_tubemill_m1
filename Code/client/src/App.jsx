@@ -92,16 +92,26 @@ function useAuthSession() {
   const [authReady, setAuthReady] = useState(() => !getStoredUser());
 
   useEffect(() => {
-    initSuperTokensClient();
     let cancelled = false;
 
     (async () => {
+      const token = getAccessToken();
+      const demoSession = typeof token === 'string' && token.startsWith('a59.1.');
+      // Skip SuperTokens web-js for HMAC demo sessions (no ST Core on Netlify demo).
+      if (!demoSession) {
+        try {
+          initSuperTokensClient();
+          await syncAccessTokenFromSession();
+        } catch {
+          /* ST optional */
+        }
+      }
+
       const stored = getStoredUser();
       if (!stored) {
         if (!cancelled) setAuthReady(true);
         return;
       }
-      await syncAccessTokenFromSession();
       if (!getAccessToken()) {
         const role = localStorage.getItem('a59-role');
         if (role) setDevRoleOverride(role);
@@ -113,7 +123,7 @@ function useAuthSession() {
           setUser(getStoredUser());
         }
       } catch {
-        // Dead/stale SuperTokens tokens cause refresh loops; wipe session fully.
+        // Dead/stale tokens cause refresh loops; wipe session fully.
         await signOutSession();
         setDevRoleOverride(null);
         if (!cancelled) setUser(null);

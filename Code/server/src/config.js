@@ -45,8 +45,9 @@ const isProduction = process.env.NODE_ENV === 'production' || isNetlify;
 
 /**
  * Deployed auth decision:
- * Prefer SuperTokens sessions. AUTH_ALLOW_HEADER_ROLE is a local/dev escape hatch only.
- * On Netlify, set SUPERTOKENS_CONNECTION_URI and AUTH_ALLOW_HEADER_ROLE=false.
+ * Prefer SuperTokens sessions when SUPERTOKENS_CONNECTION_URI is set.
+ * Without it (typical Netlify demo), badge/PIN uses HMAC demo sessions.
+ * AUTH_ALLOW_HEADER_ROLE is a local/dev escape hatch only (never on Netlify).
  */
 const authModeRaw = (
 process.env.AUTH_MODE ?? (isNetlify || process.env.NODE_ENV === 'production' ? 'static' : 'dev')).
@@ -74,9 +75,12 @@ process.env.COLLECTOR_DRIVE === 'request';
 
 /**
  * Local Docker URL from a copied .env must never be used on Netlify.
- * Prefer NETLIFY_DB_URL; ignore localhost DATABASE_URL in Functions.
+ * Prefer NETLIFY_DB_URL, then non-localhost DATABASE_URL.
  */
 function resolveConfiguredDatabaseUrl() {
+  if (process.env.NETLIFY_DB_URL) {
+    return process.env.NETLIFY_DB_URL;
+  }
   const fromEnv = process.env.DATABASE_URL;
   if (fromEnv && !(isNetlify && isLocalDatabaseUrl(fromEnv))) {
     return fromEnv;
@@ -85,23 +89,43 @@ function resolveConfiguredDatabaseUrl() {
 }
 
 const superTokensConnectionUri =
-process.env.SUPERTOKENS_CONNECTION_URI ?? (
-isProduction ? '' : 'http://localhost:3567');
+  process.env.SUPERTOKENS_CONNECTION_URI ?? (isProduction ? '' : 'http://localhost:3567');
 const authStrict =
-process.env.AUTH_STRICT === 'true' ||
-isProduction && process.env.AUTH_STRICT !== 'false';
+  process.env.AUTH_STRICT === 'true' ||
+  (isProduction && process.env.AUTH_STRICT !== 'false');
 /**
  * Dev-only: accept x-app-role when no SuperTokens session is present.
  * Impossible in production / Netlify regardless of AUTH_ALLOW_HEADER_ROLE.
  */
 const allowHeaderRole =
-  !isProduction && (
-    process.env.AUTH_ALLOW_HEADER_ROLE === 'true' ||
-    authMode === 'dev' && process.env.AUTH_ALLOW_HEADER_ROLE !== 'false'
-  );
+  !isProduction &&
+  (process.env.AUTH_ALLOW_HEADER_ROLE === 'true' ||
+    (authMode === 'dev' && process.env.AUTH_ALLOW_HEADER_ROLE !== 'false'));
+
+/** When SuperTokens Core is unset, badge-PIN uses HMAC session tokens (Netlify demo). */
+const superTokensEnabled = Boolean(superTokensConnectionUri);
+
+/** Plant Windows Server deploy — co-located Postgres on loopback is expected. */
+const deployTarget = (process.env.DEPLOY_TARGET ?? '').toLowerCase();
+const isWindowsPlant = deployTarget === 'windows';
+
+/**
+ * Bind address. Windows plant production defaults to loopback (IIS reverse-proxies).
+ * Override with HOST=0.0.0.0 for Docker / local multi-host access.
+ */
+function resolveListenHost() {
+  if (process.env.HOST) return process.env.HOST;
+  if (isWindowsPlant) return '127.0.0.1';
+  if (isProduction && !isNetlify) return '127.0.0.1';
+  return undefined; // Node default (all interfaces) — fine for dev / Docker
+}
 
 export const config = {
   port: Number(process.env.PORT ?? 3001),
+  host: resolveListenHost(),
+  deployTarget: deployTarget || null,
+  isWindowsPlant,
+  logDir: process.env.LOG_DIR ?? (isWindowsPlant ? 'C:\\Zedral\\logs' : ''),
   databaseUrl: resolveConfiguredDatabaseUrl(),
   tenantId: tenantFromEnv,
   collectorMode: (process.env.COLLECTOR_MODE ?? 'sim').toLowerCase(),
@@ -122,38 +146,84 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   superTokensConnectionUri,
   superTokensApiKey: process.env.SUPERTOKENS_API_KEY ?? '',
-  superTokensEnabled: Boolean(superTokensConnectionUri),
+  superTokensEnabled,
+  /** HMAC floor sessions when SuperTokens Core is not wired. */
+  demoSessionsEnabled: !superTokensEnabled,
   authStrict,
   allowHeaderRole,
   apiDomain: process.env.API_DOMAIN ?? `http://localhost:${process.env.PORT ?? 3001}`,
   websiteDomain: process.env.WEBSITE_DOMAIN ?? 'http://localhost:5173',
   // Must match client SuperTokens apiBasePath (/api/auth). Vite proxy forwards /api intact.
   apiBasePath: process.env.API_BASE_PATH ?? '/api/auth',
-  websiteBasePath: process.env.WEBSITE_BASE_PATH ?? '/auth'
+  websiteBasePath: process.env.WEBSITE_BASE_PATH ?? '/auth',
 };
 
+/**
+ * Hard requirements for production boot.
+ * - Windows plant (DEPLOY_TARGET=windows): SuperTokens + real SERVICE_TOKEN required;
+ *   localhost DATABASE_URL is allowed (loopback Postgres).
+ * - Netlify / cloud: hosted DB required; SuperTokens optional (HMAC demo with warnings).
+ */
 export function assertProductionSecrets() {
   if (!config.isProduction) return;
 
-  if (!config.superTokensConnectionUri) {
-    throw new Error(
-      'SUPERTOKENS_CONNECTION_URI is required when NODE_ENV=production or on Netlify'
-    );
-  }
-
+  const usingDefaultDbCreds = /tubemill:tubemill@/i.test(config.databaseUrl);
   const usingDefaultToken =
     !process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token';
-  if (usingDefaultToken) {
-    throw new Error('Set a non-default SERVICE_TOKEN when NODE_ENV=production or on Netlify');
+
+  if (config.isWindowsPlant) {
+    if (usingDefaultDbCreds) {
+      throw new Error(
+        'DEPLOY_TARGET=windows: refuse default tubemill:tubemill DATABASE_URL. Use m1_app with a vaulted password.'
+      );
+    }
+    if (!process.env.DATABASE_URL && !process.env.NETLIFY_DB_URL) {
+      throw new Error('DEPLOY_TARGET=windows: set DATABASE_URL to the local PostgreSQL connection string.');
+    }
+    if (!config.superTokensEnabled) {
+      throw new Error(
+        'DEPLOY_TARGET=windows: SUPERTOKENS_CONNECTION_URI is required. Demo HMAC sessions are not allowed on the plant server.'
+      );
+    }
+    if (usingDefaultToken) {
+      throw new Error(
+        'DEPLOY_TARGET=windows: set SERVICE_TOKEN to a non-default secret (vault / DPAPI).'
+      );
+    }
+    return;
   }
 
-  const usingDefaultDb =
-    /tubemill:tubemill@/i.test(config.databaseUrl) ||
-    isLocalDatabaseUrl(config.databaseUrl) && isNetlify;
-  if (usingDefaultDb) {
+  const hasHostedDb =
+    Boolean(process.env.NETLIFY_DB_URL) ||
+    (Boolean(process.env.DATABASE_URL) && !isLocalDatabaseUrl(process.env.DATABASE_URL));
+  const usingLocalOnNetlify = isLocalDatabaseUrl(config.databaseUrl) && isNetlify;
+  if (!hasHostedDb || usingDefaultDbCreds || usingLocalOnNetlify) {
     throw new Error(
-      'Set a non-default DATABASE_URL / NETLIFY_DB_URL when NODE_ENV=production or on Netlify'
+      'Set NETLIFY_DB_URL (or a non-localhost DATABASE_URL) when NODE_ENV=production or on Netlify'
     );
+  }
+
+  if (!config.superTokensEnabled) {
+    console.warn(
+      '[config] SUPERTOKENS_CONNECTION_URI unset — using HMAC demo sessions for badge/PIN. ' +
+        'Set SUPERTOKENS_CONNECTION_URI for SuperTokens EmailPassword + managed sessions.'
+    );
+  }
+
+  if (usingDefaultToken) {
+    console.warn(
+      '[config] SERVICE_TOKEN is default — session HMAC is derived from NETLIFY_DB_URL. ' +
+        'Set SERVICE_TOKEN (or SESSION_SECRET) for a dedicated signing key.'
+    );
+  }
+
+  if (config.authStrict && !config.isNetlify) {
+    if (!config.superTokensEnabled) {
+      throw new Error('AUTH_STRICT: SUPERTOKENS_CONNECTION_URI is required outside Netlify.');
+    }
+    if (usingDefaultToken) {
+      throw new Error('AUTH_STRICT: SERVICE_TOKEN must not be the default value.');
+    }
   }
 }
 

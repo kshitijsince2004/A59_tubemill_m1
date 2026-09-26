@@ -8,23 +8,47 @@ import {
 import { createApp } from '../../server/src/app';
 import { registerCollectorConsumers } from '../../server/src/services/CollectorIngestService';
 
-try {
-  assertProductionSecrets();
-  assertCollectorModeSupported();
-  assertBcAdapterSupported();
-} catch (err) {
-  console.error(err instanceof Error ? err.message : err);
-  throw err;
+/**
+ * Never throw at module load — a top-level throw becomes a permanent 502 for every
+ * /api/* request. Validate config, then export a working handler (or a 503 JSON body).
+ */
+function buildHandler() {
+  try {
+    assertProductionSecrets();
+    assertCollectorModeSupported();
+    assertBcAdapterSupported();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[netlify/api] boot config error:', message);
+    return async () => ({
+      statusCode: 503,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        data: null,
+        errors: [{ message, code: 'BOOT_CONFIG' }],
+      }),
+    });
+  }
+
+  try {
+    registerCollectorConsumers();
+    const app = createApp({ serveClient: false });
+    console.log(
+      `A-59 Tubemill Netlify function ready (auth=${config.authMode}, st=${config.superTokensEnabled}, demoSessions=${config.demoSessionsEnabled}, collector=${config.collectorMode})`,
+    );
+    return serverless(app);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[netlify/api] createApp failed:', message);
+    return async () => ({
+      statusCode: 503,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        data: null,
+        errors: [{ message, code: 'APP_INIT' }],
+      }),
+    });
+  }
 }
 
-registerCollectorConsumers();
-// No startCollectorLoop — serverless cannot hold setInterval between invocations.
-// Simulated PLC ticks run on demand from GET /tubemill/runs/:id/live.
-
-const app = createApp({ serveClient: false });
-
-console.log(
-  `A-59 Tubemill Netlify function ready (auth=${config.authMode}, collector=${config.collectorMode})`,
-);
-
-export const handler = serverless(app);
+export const handler = buildHandler();

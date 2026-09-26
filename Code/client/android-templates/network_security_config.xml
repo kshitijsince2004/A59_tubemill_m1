@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Scoped cleartext: only enable for a named plant host when TLS is not yet available.
+     Prefer plant HTTPS. Do not use cleartextTrafficPermitted="true" globally. -->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors>
+      <certificates src="system" />
+    </trust-anchors>
+  </base-config>
+  <!-- Uncomment and set host when plant API is HTTP-only interim:
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="true">YOUR_PLANT_HOST</domain>
+  </domain-config>
+  -->
+</network-security-config>

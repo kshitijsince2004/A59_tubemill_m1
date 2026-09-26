@@ -6,7 +6,13 @@ import {
   requireAuth } from
 
 '../middleware/authMiddleware';
-import { validateBadgePin, verifySessionPin, verifySupervisorOverridePin } from '../services/authService';
+import { validateBadgePin, verifySessionPin, verifySupervisorOverridePin, loadGrantsByUserId } from '../services/authService';
+import {
+  attachSessionHeaders,
+  verifySessionToken,
+  issueAccessToken,
+  issueRefreshToken,
+} from '../services/sessionTokenService';
 
 const router = Router();
 
@@ -35,6 +41,8 @@ router.post('/auth/badge-pin', async (req, res) => {
         },
         {}
       );
+    } else if (config.demoSessionsEnabled) {
+      attachSessionHeaders(res, result.user);
     }
 
     res.json({
@@ -42,7 +50,8 @@ router.post('/auth/badge-pin', async (req, res) => {
         user: result.user,
         tenantId: config.tenantId,
         authMode: config.authMode,
-        superTokens: config.superTokensEnabled
+        superTokens: config.superTokensEnabled,
+        demoSessions: config.demoSessionsEnabled,
       },
       errors: null
     });
@@ -51,6 +60,47 @@ router.post('/auth/badge-pin', async (req, res) => {
     res.status(500).json({
       data: null,
       errors: [{ message: err instanceof Error ? err.message : 'Login failed' }]
+    });
+  }
+});
+
+/**
+ * Refresh for HMAC demo sessions. SuperTokens owns /api/auth/session/refresh when ST is enabled
+ * (ST middleware). This route covers the demo path the client already calls.
+ */
+router.post('/auth/session/refresh', async (req, res) => {
+  try {
+    if (config.superTokensEnabled) {
+      // Should be handled by SuperTokens middleware; if we land here, reject clearly.
+      res.status(501).json({
+        data: null,
+        errors: [{ message: 'Use SuperTokens session refresh' }],
+      });
+      return;
+    }
+    const auth = req.header('authorization') || '';
+    const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+    const token = bearer || req.header('st-refresh-token') || '';
+    const payload = verifySessionToken(token, 'refresh');
+    if (!payload) {
+      res.status(401).json({ data: null, errors: [{ message: 'Invalid refresh token' }] });
+      return;
+    }
+    const user = await loadGrantsByUserId(payload.sub);
+    if (!user) {
+      res.status(401).json({ data: null, errors: [{ message: 'User not found' }] });
+      return;
+    }
+    const access = issueAccessToken(user);
+    const refresh = issueRefreshToken(user);
+    res.setHeader('st-access-token', access);
+    res.setHeader('st-refresh-token', refresh);
+    res.json({ data: { ok: true }, errors: null });
+  } catch (err) {
+    console.error('[auth/session/refresh]', err);
+    res.status(500).json({
+      data: null,
+      errors: [{ message: err instanceof Error ? err.message : 'Refresh failed' }],
     });
   }
 });

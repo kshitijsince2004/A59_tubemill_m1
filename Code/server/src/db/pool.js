@@ -160,3 +160,13 @@ export async function queryOn(client, text, params) {
 export async function queryOneOn(client, text, params) {
   return queryOne(text, params, client);
 }
+
+/** Drain and close the pool (graceful shutdown). Safe to call multiple times. */
+export async function closePool() {
+  if (!poolInstance) return;
+  const instance = poolInstance;
+  poolInstance = null;
+  if (typeof instance.end === 'function') {
+    await instance.end();
+  }
+}

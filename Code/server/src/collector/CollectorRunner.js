@@ -195,3 +195,10 @@ export function startCollectorLoop() {
   }
   startLoop();
 }
+
+export function stopCollectorLoop() {
+  if (interval) {
+    clearInterval(interval);
+    interval = null;
+  }
+}

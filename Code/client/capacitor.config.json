@@ -1,0 +1,18 @@
+{
+  "appId": "com.zedral.m1.operator",
+  "appName": "Zedral M1 Operator",
+  "webDir": "dist-operator",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#163328",
+      "showSpinner": false
+    }
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

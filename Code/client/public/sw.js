@@ -1,4 +1,4 @@
-const CACHE = 'a59-shell-v2';
+const CACHE = 'a59-shell-v3';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -18,12 +18,16 @@ self.addEventListener('activate', (event) => {
 /** Never cache Vite/HMR/module graph — stale modules break local dev hard. */
 function shouldBypassCache(url) {
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/tubemill')) return true;
+  if (url.pathname.startsWith('/.netlify/')) return true;
   if (url.pathname.startsWith('/src/') || url.pathname.startsWith('/@') || url.pathname.startsWith('/node_modules/')) {
     return true;
   }
   if (url.searchParams.has('t') || url.searchParams.has('v') || url.searchParams.has('import')) return true;
+  // App routes (SPA) — always network; don't let SW eat navigation failures.
+  if (url.pathname === '/login' || url.pathname.startsWith('/op/') || url.pathname.startsWith('/mh/') || url.pathname.startsWith('/ph/') || url.pathname.startsWith('/admin/')) {
+    return true;
+  }
   if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-    // In local Vite: only shell assets may be cached; everything else bypasses.
     if (!SHELL.includes(url.pathname) && url.pathname !== '/sw.js') return true;
   }
   return false;
@@ -32,6 +36,7 @@ function shouldBypassCache(url) {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET') return;
+  if (event.request.mode === 'navigate') return;
   if (shouldBypassCache(url)) return;
 
   event.respondWith(
@@ -45,7 +50,7 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
         .catch(() => cached);
-      return network.catch(() => cached);
+      return network.then((res) => res || cached).catch(() => cached);
     }),
   );
 });
