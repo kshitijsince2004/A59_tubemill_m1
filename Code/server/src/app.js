@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { config } from './config';
+import { logger } from './lib/logger';
 import { initSuperTokens, getSuperTokensMiddleware, getSuperTokensErrorHandler } from './config/authConfig';
 import tubeMillRoutes from './routes/tubeMillRoutes';
 import furnaceRoutes from './routes/furnaceRoutes';
@@ -25,6 +26,8 @@ import machineCrewRoutes from './routes/machineCrewRoutes';
 import crewRoutes from './routes/crewRoutes';
 import machineHandoverRoutes from './routes/machineHandoverRoutes';
 import traceabilityRoutes from './routes/traceabilityRoutes';
+import operatorRoutes from './routes/operatorRoutes';
+import deviceRoutes from './routes/deviceRoutes';
 
 const CORS_ALLOWED_HEADERS = [
   'content-type',
@@ -35,10 +38,25 @@ const CORS_ALLOWED_HEADERS = [
   'x-service-token',
   'x-override-token',
   'x-request-id',
+  'x-device-id',
+  'x-app-version',
   'st-auth-mode',
   'fdi-version',
   'rid',
 ];
+
+/** Capacitor WebView origins — required when the operator APK talks to the plant API. */
+const CAPACITOR_ORIGINS = ['https://localhost', 'capacitor://localhost'];
+
+function resolveCorsOrigins(raw) {
+  const listed = String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const set = new Set(listed);
+  for (const o of CAPACITOR_ORIGINS) set.add(o);
+  return [...set];
+}
 
 const CORS_EXPOSED_HEADERS = [
   'front-token',
@@ -67,7 +85,7 @@ export function createApp(options = {}) {
   } else if (config.corsOrigin && config.corsOrigin !== 'same-origin') {
     app.use(
       cors({
-        origin: config.corsOrigin.split(',').map((s) => s.trim()),
+        origin: resolveCorsOrigins(config.corsOrigin),
         allowedHeaders: CORS_ALLOWED_HEADERS,
         exposedHeaders: CORS_EXPOSED_HEADERS,
         credentials: true,
@@ -77,27 +95,37 @@ export function createApp(options = {}) {
 
   app.use(express.json());
 
-  // Observability (F18): request id + structured access log
+  // Observability: request id + device id + structured access log (pino)
   app.use((req, res, next) => {
     const incoming = req.header('x-request-id');
     const requestId =
       incoming && String(incoming).trim() ? String(incoming).trim() : crypto.randomUUID();
+    const deviceIdRaw = req.header('x-device-id');
+    const deviceId =
+      deviceIdRaw && String(deviceIdRaw).trim() ? String(deviceIdRaw).trim().slice(0, 128) : null;
     req.requestId = requestId;
+    req.deviceId = deviceId;
     res.setHeader('x-request-id', requestId);
     const started = Date.now();
     res.on('finish', () => {
-      console.log(
-        JSON.stringify({
-          level: 'info',
-          requestId,
-          method: req.method,
-          path: req.originalUrl || req.url,
-          status: res.statusCode,
-          ms: Date.now() - started,
-        })
-      );
+      logger.info({
+        request_id: requestId,
+        device_id: deviceId,
+        method: req.method,
+        endpoint: req.originalUrl || req.url,
+        status: res.statusCode,
+        ms: Date.now() - started,
+      });
     });
     next();
+  });
+
+  // IIS / watchdogs often probe /health (not under /api)
+  app.get('/health', async (_req, res) => {
+    const { buildHealthPayload } = await import('./routes/healthPayload');
+    const payload = await buildHealthPayload();
+    const code = payload.status === 'fail' ? 503 : 200;
+    res.status(code).json({ data: payload, errors: null });
   });
 
   if (stEnabled) {
@@ -128,6 +156,8 @@ export function createApp(options = {}) {
     masterDataRoutes,
     validationRulesRoutes,
     traceabilityRoutes,
+    operatorRoutes,
+    deviceRoutes,
   ];
 
   for (const r of mounts) {

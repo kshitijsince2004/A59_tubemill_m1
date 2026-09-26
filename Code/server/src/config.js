@@ -105,8 +105,27 @@ const allowHeaderRole =
 /** When SuperTokens Core is unset, badge-PIN uses HMAC session tokens (Netlify demo). */
 const superTokensEnabled = Boolean(superTokensConnectionUri);
 
+/** Plant Windows Server deploy — co-located Postgres on loopback is expected. */
+const deployTarget = (process.env.DEPLOY_TARGET ?? '').toLowerCase();
+const isWindowsPlant = deployTarget === 'windows';
+
+/**
+ * Bind address. Windows plant production defaults to loopback (IIS reverse-proxies).
+ * Override with HOST=0.0.0.0 for Docker / local multi-host access.
+ */
+function resolveListenHost() {
+  if (process.env.HOST) return process.env.HOST;
+  if (isWindowsPlant) return '127.0.0.1';
+  if (isProduction && !isNetlify) return '127.0.0.1';
+  return undefined; // Node default (all interfaces) — fine for dev / Docker
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 3001),
+  host: resolveListenHost(),
+  deployTarget: deployTarget || null,
+  isWindowsPlant,
+  logDir: process.env.LOG_DIR ?? (isWindowsPlant ? 'C:\\Zedral\\logs' : ''),
   databaseUrl: resolveConfiguredDatabaseUrl(),
   tenantId: tenantFromEnv,
   collectorMode: (process.env.COLLECTOR_MODE ?? 'sim').toLowerCase(),
@@ -140,19 +159,45 @@ export const config = {
 };
 
 /**
- * Hard requirements for a bootable Netlify/production function.
- * SuperTokens Core is optional — without it we use HMAC demo sessions.
+ * Hard requirements for production boot.
+ * - Windows plant (DEPLOY_TARGET=windows): SuperTokens + real SERVICE_TOKEN required;
+ *   localhost DATABASE_URL is allowed (loopback Postgres).
+ * - Netlify / cloud: hosted DB required; SuperTokens optional (HMAC demo with warnings).
  */
 export function assertProductionSecrets() {
   if (!config.isProduction) return;
 
+  const usingDefaultDbCreds = /tubemill:tubemill@/i.test(config.databaseUrl);
+  const usingDefaultToken =
+    !process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token';
+
+  if (config.isWindowsPlant) {
+    if (usingDefaultDbCreds) {
+      throw new Error(
+        'DEPLOY_TARGET=windows: refuse default tubemill:tubemill DATABASE_URL. Use m1_app with a vaulted password.'
+      );
+    }
+    if (!process.env.DATABASE_URL && !process.env.NETLIFY_DB_URL) {
+      throw new Error('DEPLOY_TARGET=windows: set DATABASE_URL to the local PostgreSQL connection string.');
+    }
+    if (!config.superTokensEnabled) {
+      throw new Error(
+        'DEPLOY_TARGET=windows: SUPERTOKENS_CONNECTION_URI is required. Demo HMAC sessions are not allowed on the plant server.'
+      );
+    }
+    if (usingDefaultToken) {
+      throw new Error(
+        'DEPLOY_TARGET=windows: set SERVICE_TOKEN to a non-default secret (vault / DPAPI).'
+      );
+    }
+    return;
+  }
+
   const hasHostedDb =
     Boolean(process.env.NETLIFY_DB_URL) ||
     (Boolean(process.env.DATABASE_URL) && !isLocalDatabaseUrl(process.env.DATABASE_URL));
-  const usingDefaultDb =
-    /tubemill:tubemill@/i.test(config.databaseUrl) ||
-    (isLocalDatabaseUrl(config.databaseUrl) && isNetlify);
-  if (!hasHostedDb || usingDefaultDb) {
+  const usingLocalOnNetlify = isLocalDatabaseUrl(config.databaseUrl) && isNetlify;
+  if (!hasHostedDb || usingDefaultDbCreds || usingLocalOnNetlify) {
     throw new Error(
       'Set NETLIFY_DB_URL (or a non-localhost DATABASE_URL) when NODE_ENV=production or on Netlify'
     );
@@ -165,13 +210,20 @@ export function assertProductionSecrets() {
     );
   }
 
-  const usingDefaultToken =
-    !process.env.SERVICE_TOKEN || config.serviceToken === 'dev-service-token';
   if (usingDefaultToken) {
     console.warn(
       '[config] SERVICE_TOKEN is default — session HMAC is derived from NETLIFY_DB_URL. ' +
         'Set SERVICE_TOKEN (or SESSION_SECRET) for a dedicated signing key.'
     );
+  }
+
+  if (config.authStrict && !config.isNetlify) {
+    if (!config.superTokensEnabled) {
+      throw new Error('AUTH_STRICT: SUPERTOKENS_CONNECTION_URI is required outside Netlify.');
+    }
+    if (usingDefaultToken) {
+      throw new Error('AUTH_STRICT: SERVICE_TOKEN must not be the default value.');
+    }
   }
 }
 

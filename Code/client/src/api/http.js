@@ -18,13 +18,29 @@ export function getDevRoleOverride() {
   return devRoleOverride;
 }
 
-const BASE = '/api';
+/** Web: relative `/api`. Operator APK: absolute plant URL via `VITE_API_BASE`. */
+const BASE = (import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '');
+
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.0.0';
+
+/** Default read/write timeout — weak plant Wi-Fi must not hang the UI for minutes. */
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 const SKIP_AUTH_CLEAR = new Set([
   '/auth/badge-pin',
   '/auth/signout',
   '/auth/session/refresh',
 ]);
+
+export function getApiBase() {
+  return BASE;
+}
+
+function withTimeout(ms = DEFAULT_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return { signal: ctrl.signal, clear: () => clearTimeout(timer) };
+}
 
 function captureSessionHeaders(res) {
   const access = res.headers.get('st-access-token');
@@ -37,9 +53,24 @@ function captureSessionHeaders(res) {
   }
 }
 
+function deviceIdHeader() {
+  try {
+    let id = sessionStorage.getItem('a59-device-id');
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem('a59-device-id', id);
+    }
+    return { 'x-device-id': id };
+  } catch {
+    return {};
+  }
+}
+
 function authHeaders() {
   const headers = {
     'st-auth-mode': 'header',
+    'x-app-version': APP_VERSION,
+    ...deviceIdHeader(),
   };
   const token = getAccessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -141,6 +172,7 @@ function handleUnauthorized(path) {
 async function fetchWithAuth(path, init = {}) {
   const buildHeaders = () => ({
     'Content-Type': 'application/json',
+    'x-request-id': crypto.randomUUID(),
     ...authHeaders(),
     ...init?.headers,
   });
@@ -151,7 +183,14 @@ async function fetchWithAuth(path, init = {}) {
     headers['Idempotency-Key'] = crypto.randomUUID();
   }
 
-  let res = await fetch(`${BASE}${path}`, { ...init, headers });
+  const timeout = withTimeout(init?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const { timeoutMs: _t, ...rest } = init || {};
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...rest, headers, signal: rest.signal ?? timeout.signal });
+  } finally {
+    timeout.clear();
+  }
   captureSessionHeaders(res);
 
   if (res.status === 401 && shouldAttemptRefresh(path)) {
@@ -161,7 +200,16 @@ async function fetchWithAuth(path, init = {}) {
       if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !headers['Idempotency-Key']) {
         headers['Idempotency-Key'] = crypto.randomUUID();
       }
-      res = await fetch(`${BASE}${path}`, { ...init, headers });
+      const timeout2 = withTimeout(init?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+      try {
+        res = await fetch(`${BASE}${path}`, {
+          ...rest,
+          headers,
+          signal: rest.signal ?? timeout2.signal,
+        });
+      } finally {
+        timeout2.clear();
+      }
       captureSessionHeaders(res);
     }
   }
@@ -170,6 +218,29 @@ async function fetchWithAuth(path, init = {}) {
     handleUnauthorized(path);
   }
   return res;
+}
+
+/**
+ * Raw fetch for the sync engine — no offline enqueue; caller owns retries.
+ * Path may be absolute or API-relative (starting with /).
+ */
+export async function rawApiFetch(path, init = {}) {
+  const url = path.startsWith('http') ? path : `${BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-request-id': crypto.randomUUID(),
+    ...authHeaders(),
+    ...init?.headers,
+  };
+  const timeout = withTimeout(init?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const { timeoutMs: _t, ...rest } = init || {};
+  try {
+    const res = await fetch(url, { ...rest, headers, signal: rest.signal ?? timeout.signal });
+    captureSessionHeaders(res);
+    return res;
+  } finally {
+    timeout.clear();
+  }
 }
 
 export async function apiRequest(path, init) {
@@ -183,6 +254,18 @@ export async function apiRequest(path, init) {
     };
     if (!headers['Idempotency-Key']) {
       headers['Idempotency-Key'] = crypto.randomUUID();
+    }
+    const { isOperatorBuild } = await import('../lib/buildFlags');
+    if (isOperatorBuild()) {
+      const { submitOrQueue } = await import('../offline/syncEngine');
+      await submitOrQueue({
+        url: path,
+        method,
+        payload: init?.body,
+        aggregateKey: headers['x-aggregate-key'] || `path:${path}`,
+        headers,
+      });
+      throw new Error('Offline — queued for sync');
     }
     const { enqueueOutbox } = await import('../offline/outbox');
     await enqueueOutbox({

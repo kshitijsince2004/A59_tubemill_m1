@@ -222,6 +222,27 @@ export function requireAuth(req, res, next) {
   next();
 }
 
+/** Operator tablet / floor APIs — OPERATOR only (not Machine Head and above). */
+export function requireOperator(req, res, next) {
+  const authed = req;
+  if (!authed.user) {
+    res.status(401).json({ data: null, errors: [{ message: 'Unauthenticated' }] });
+    return;
+  }
+  const role = authed.appRole ?? authed.user.primaryRole ?? 'OPERATOR';
+  const isOperator =
+    role === 'OPERATOR' &&
+    !authed.user.roles?.some((r) => r === 'MACHINE_HEAD' || r === 'PLANT_HEAD' || r === 'ADMIN');
+  if (!isOperator) {
+    res.status(403).json({
+      data: null,
+      errors: [{ message: 'This account is not permitted to use this application.' }],
+    });
+    return;
+  }
+  next();
+}
+
 export function requireRole(...roles) {
   return (req, res, next) => {
     const authed = req;

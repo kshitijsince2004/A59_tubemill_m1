@@ -453,7 +453,7 @@ async function seed() {
 
     // 7-day production / stoppage / defect history so MH + PH charts have series
     const stopCodes = ['TM-01', 'TM-02', 'TM-03', 'TM-06'];
-    const defectCodes = ['D-JOINT', 'D-SEAM', 'D-DIM', 'D-SCRAP'];
+    const graphDefectCodes = ['D-JOINT', 'D-SEAM', 'D-DIM', 'D-SCRAP'];
     const furnaces = ['RHF-03', 'RHF-04', 'RHF-05'];
     const graphBenches = benches.filter((b) => !b.code.startsWith('SWG')).map((b) => b.code);
 
@@ -517,7 +517,7 @@ async function seed() {
         [
           tenantId,
           runId,
-          defectCodes[d % defectCodes.length],
+          graphDefectCodes[d % graphDefectCodes.length],
           0.05 + d * 0.01,
           2 + d,
           `Demo defect day ${d}`,

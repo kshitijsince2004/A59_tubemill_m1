@@ -3,13 +3,15 @@ import { useEffect, useState } from 'react';
 import { ZButton, ZInput } from '../ui';
 import { setDevRoleOverride } from '../api/http';
 import { authApi } from '../api/authApi';
-import { setAccessToken, setStoredUser, clearAuth, getAccessToken } from '../lib/authStore';
+import { setAccessToken, setStoredUser, clearAuth, getAccessToken, primaryRole } from '../lib/authStore';
 import { initSuperTokensClient, signOutSession, staffSignIn, syncAccessTokenFromSession } from '../lib/supertokens';
+import { isOperatorBuild } from '../lib/buildFlags';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 
-/** Demo seed badges — local/dev and Netlify demo (`VITE_SHOW_DEMO_LOGIN=true`); PIN 1234. */
+/** Demo seed badges — local/dev only; never on operator APK or production without explicit flag. */
 const SHOW_DEMO_CHIPS =
-  import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGIN === 'true';
+  !isOperatorBuild() &&
+  (import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGIN === 'true');
 const DEMO_BADGE_PIN = '1234';
 const DEMO_BADGES = [
   { badge: 'OP-A59', label: 'TM op' },
@@ -23,6 +25,19 @@ const DEMO_BADGES = [
   { badge: 'PH-01', label: 'Plant' },
   { badge: 'ADM-01', label: 'Admin' },
 ];
+
+const OPERATOR_ONLY_MSG = 'This account is not permitted to use this application.';
+
+function assertOperatorAllowed(user) {
+  if (!isOperatorBuild()) return;
+  const role = primaryRole(user);
+  const elevated = (user?.roles ?? []).some(
+    (r) => r === 'MACHINE_HEAD' || r === 'PLANT_HEAD' || r === 'ADMIN'
+  );
+  if (role !== 'OPERATOR' || elevated) {
+    throw new Error(OPERATOR_ONLY_MSG);
+  }
+}
 
 export default function LoginScreen({ onUnlocked }) {
   const [mode, setMode] = useState('badge');
@@ -41,7 +56,7 @@ export default function LoginScreen({ onUnlocked }) {
     void (async () => {
       let stEnabled = false;
       try {
-        const r = await fetch('/api/tubemill/session', {
+        const r = await fetch(`${(import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '')}/tubemill/session`, {
           headers: { 'st-auth-mode': 'header' },
         });
         const j = await r.json();
@@ -76,6 +91,7 @@ export default function LoginScreen({ onUnlocked }) {
   }, []);
 
   async function afterLogin(user, { keepDevRole = false } = {}) {
+    assertOperatorAllowed(user);
     setStoredUser(user);
     localStorage.setItem('a59-unlocked', '1');
     localStorage.setItem('a59-role', user.primaryRole);
@@ -110,11 +126,98 @@ export default function LoginScreen({ onUnlocked }) {
       try {
         const me = await authApi.me();
         await afterLogin(me.user ?? data.user);
-      } catch {
+      } catch (inner) {
+        if (inner instanceof Error && inner.message === OPERATOR_ONLY_MSG) throw inner;
         await afterLogin(data.user);
       }
+      // Cache offline PIN verifier after successful online login
+      try {
+        const { buildPinVerifier } = await import('../offline/offlinePin');
+        const { saveAuthCache } = await import('../offline/db');
+        let deviceId = sessionStorage.getItem('a59-device-id') || 'web';
+        const verifier = await buildPinVerifier(pin, badge.trim(), deviceId);
+        await saveAuthCache({
+          userCode: badge.trim(),
+          pinVerifier: verifier,
+          displayName: data.user?.fullName ?? badge.trim(),
+          role: data.user?.primaryRole ?? 'OPERATOR',
+          lineCode: data.user?.machineAccess?.[0]?.machineCode ?? null,
+        });
+      } catch {
+        /* offline cache optional */
+      }
     } catch (err) {
-      if (allowHeader) {
+      if (err instanceof Error && err.message === OPERATOR_ONLY_MSG) {
+        clearAuth();
+        await signOutSession();
+        setError(OPERATOR_ONLY_MSG);
+        return;
+      }
+      // Offline PIN path when network fails
+      const networkFail =
+        !navigator.onLine ||
+        (err instanceof Error &&
+          (/failed to fetch|network|offline|abort/i.test(err.message) || err.name === 'AbortError'));
+      if (networkFail) {
+        try {
+          const { getAuthCache } = await import('../offline/db');
+          const {
+            verifyPinOffline,
+            isAuthCacheFresh,
+            isOfflineSessionValid,
+          } = await import('../offline/offlinePin');
+          const { setOfflineSession } = await import('../lib/authStore');
+          const cached = await getAuthCache(badge.trim());
+          if (
+            cached &&
+            isAuthCacheFresh(cached.cached_at) &&
+            (await verifyPinOffline(
+              pin,
+              cached.pin_verifier,
+              badge.trim(),
+              sessionStorage.getItem('a59-device-id') || 'web'
+            ))
+          ) {
+            if (isOperatorBuild() && cached.role && cached.role !== 'OPERATOR') {
+              throw new Error(OPERATOR_ONLY_MSG);
+            }
+            const startedAt = Date.now();
+            if (!isOfflineSessionValid(startedAt)) {
+              throw new Error('Offline session expired — connect to the plant network to sign in');
+            }
+            const fake = {
+              userId: `offline:${badge.trim()}`,
+              username: badge.trim(),
+              fullName: cached.display_name || badge.trim(),
+              empCode: badge.trim(),
+              email: null,
+              roles: ['OPERATOR'],
+              primaryRole: 'OPERATOR',
+              processAccess: [
+                { processCode: 'TM', level: 'WRITE' },
+                { processCode: 'FUR', level: 'WRITE' },
+                { processCode: 'STP', level: 'WRITE' },
+                { processCode: 'DRW', level: 'WRITE' },
+                { processCode: 'SWG', level: 'WRITE' },
+              ],
+              machineAccess: cached.line_code
+                ? [{ machineCode: cached.line_code, level: 'WRITE' }]
+                : [],
+              offline: true,
+            };
+            setOfflineSession({ startedAt, userCode: badge.trim() });
+            await afterLogin(fake);
+            setError(null);
+            return;
+          }
+        } catch (offlineErr) {
+          if (offlineErr instanceof Error && offlineErr.message === OPERATOR_ONLY_MSG) {
+            setError(OPERATOR_ONLY_MSG);
+            return;
+          }
+        }
+      }
+      if (allowHeader && !isOperatorBuild()) {
         const role = 'OPERATOR';
         setDevRoleOverride(role);
         const fake = {
@@ -199,8 +302,10 @@ export default function LoginScreen({ onUnlocked }) {
       ), /*#__PURE__*/
       _jsxs("div", { className: "login-screen__card", children: [/*#__PURE__*/
         _jsx("h1", { children: "Sign in" }), /*#__PURE__*/
-        _jsx("p", { className: "muted", children: "Badge ID + 4-digit PIN for operators, machine heads, and admin" }), /*#__PURE__*/
-        superTokensOn === true ? _jsxs("div", { className: "login-screen__modes", children: [/*#__PURE__*/
+        _jsx("p", { className: "muted", children: isOperatorBuild()
+          ? "Badge ID + 4-digit PIN — operators only"
+          : "Badge ID + 4-digit PIN for operators, machine heads, and admin" }), /*#__PURE__*/
+        superTokensOn === true && !isOperatorBuild() ? _jsxs("div", { className: "login-screen__modes", children: [/*#__PURE__*/
           _jsx("button", {
             type: "button",
             className: mode === 'badge' ? 'process-nav__item active' : 'process-nav__item',

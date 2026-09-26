@@ -134,31 +134,10 @@ function failCaught(res, e, fallback) {
 
 /** Public — no auth (must be registered before requireAuth). */
 router.get('/health', async (_req, res) => {
-  let db = 'ok';
-  let dbError;
-  try {
-    await query(`SELECT 1 AS ok`);
-  } catch (err) {
-    db = 'error';
-    dbError = err instanceof Error ? err.message : String(err);
-  }
-  ok(res, {
-    status: db === 'ok' ? 'ok' : 'degraded',
-    db,
-    dbError,
-    hasNetlifyDbUrl: Boolean(process.env.NETLIFY_DB_URL),
-    hasRemoteDatabaseUrl: Boolean(
-      process.env.DATABASE_URL && !/localhost|127\.0\.0\.1/i.test(process.env.DATABASE_URL)
-    ),
-    databaseUrlIsLocalhost: /localhost|127\.0\.0\.1/i.test(process.env.DATABASE_URL ?? ''),
-    context: process.env.CONTEXT ?? null,
-    fix:
-    db === 'ok' ?
-    null :
-    'Create Netlify Database (Data & Storage → Database) OR set DATABASE_URL to a Neon/Supabase URL (not localhost). Then redeploy.',
-    collectorMode: config.collectorMode,
-    bcAdapter: config.bcAdapter
-  });
+  const { buildHealthPayload } = await import('./healthPayload');
+  const payload = await buildHealthPayload();
+  const code = payload.status === 'fail' ? 503 : 200;
+  res.status(code).json({ data: payload, errors: null });
 });
 
 router.get('/tubemill/session', authMiddleware, (req, res) => {

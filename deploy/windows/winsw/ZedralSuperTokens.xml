@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- WinSW for SuperTokens Core (JRE). Adjust jar path after unpacking the SuperTokens Core release. -->
+<service>
+  <id>ZedralSuperTokens</id>
+  <name>Zedral SuperTokens Core</name>
+  <description>SuperTokens Core for Zedral auth (loopback 3567)</description>
+  <executable>java</executable>
+  <arguments>-Xmx512m -jar C:\Zedral\app\supertokens\supertokens.jar</arguments>
+  <workingdirectory>C:\Zedral\app\supertokens</workingdirectory>
+  <env name="POSTGRESQL_CONNECTION_URI" value="postgresql://supertokens:CHANGE_ME@127.0.0.1:5432/supertokens"/>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <startmode>Automatic</startmode>
+  <stoptimeout>20 sec</stoptimeout>
+</service>

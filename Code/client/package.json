@@ -3,20 +3,36 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "validate:palette": "node scripts/validate_palette.mjs"
-  },
   "dependencies": {
     "@a59/shared": "*",
+    "@capacitor-community/keep-awake": "^5.0.0",
+    "@capacitor-community/sqlite": "^6.0.0",
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/network": "^6.0.0",
+    "@capacitor/preferences": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
     "@tanstack/react-query": "^5.64.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.4",
     "recharts": "^3.10.1",
     "supertokens-web-js": "^0.14.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:operator": "vite --config vite.operator.config.js",
+    "build": "vite build",
+    "build:operator": "vite build --config vite.operator.config.js && node scripts/operator-postbuild.mjs",
+    "check:operator-purity": "node scripts/check-operator-purity.mjs",
+    "test:outbox": "node --test src/offline/outboxLogic.test.js",
+    "cap:sync": "npm run build:operator && npx cap sync android",
+    "android:apk": "npm run cap:sync && cd android && .\\gradlew.bat assembleDebug",
+    "android:apk:release": "npm run cap:sync && cd android && .\\gradlew.bat assembleRelease",
+    "preview": "vite preview",
+    "validate:palette": "node scripts/validate_palette.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

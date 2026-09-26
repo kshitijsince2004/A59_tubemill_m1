@@ -8,7 +8,16 @@ let signingOut = false;
 
 export function initSuperTokensClient() {
   if (initialized) return;
-  const apiDomain = window.location.origin;
+  // Operator APK WebView origin is https://localhost — API domain must be the plant host.
+  const envBase = import.meta.env.VITE_API_BASE;
+  let apiDomain = window.location.origin;
+  if (envBase && /^https?:\/\//i.test(envBase)) {
+    try {
+      apiDomain = new URL(envBase).origin;
+    } catch {
+      /* keep location.origin */
+    }
+  }
   SuperTokens.init({
     appInfo: {
       appName: 'A59 Tube Mill M1',

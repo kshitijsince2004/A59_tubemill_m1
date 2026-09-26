@@ -101,6 +101,19 @@ textarea {
   position: relative;
 }
 
+/* Glove-mode hit targets on floor consoles (audit F35) â€” 48px minimum. */
+.operator-root .z-btn,
+.operator-root button:not(.nav-rail__btn):not(.status-rail__chip),
+.operator-root .z-input,
+.operator-root .z-select,
+.operator-root .z-textarea {
+  min-height: 48px;
+}
+
+.operator-root .z-btn--sm {
+  min-height: 44px;
+}
+
 .nav-rail {
   position: fixed;
   inset: 0 auto 0 0;
@@ -1202,6 +1215,10 @@ label {
 }
 .z-sync--warn {
   color: var(--color-warning);
+}
+.z-sync--danger {
+  color: var(--color-destructive);
+  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
 }
 .z-sync--pending {
   color: var(--color-accent-foreground);
@@ -5846,7 +5863,7 @@ button.linkish {
   }
 }
 
-/* —— Traceability desk —— */
+/* ï¿½ï¿½ Traceability desk ï¿½ï¿½ */
 .trace-console {
   display: flex;
   flex-direction: column;

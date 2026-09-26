@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- WinSW service definition for Zedral Node backend.
+     Place WinSW.exe as ZedralBackend.exe next to this file as ZedralBackend.xml -->
+<service>
+  <id>ZedralBackend</id>
+  <name>Zedral Backend API</name>
+  <description>Zedral M1 Node.js API (loopback only; fronted by IIS)</description>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>server\dist\index.js</arguments>
+  <workingdirectory>C:\Zedral\app\current</workingdirectory>
+  <env file="C:\Zedral\config\backend.env" />
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <onfailure action="restart" delay="5 sec"/>
+  <onfailure action="restart" delay="15 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <stoptimeout>20 sec</stoptimeout>
+  <priority>Normal</priority>
+</service>

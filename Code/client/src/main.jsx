@@ -5,7 +5,7 @@ import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import './styles.css';
 import './ui/ui.css';
-import { flushOutbox } from './offline/outbox';
+import { flushOutbox, startOutboxPeriodicFlush } from './offline/outbox';
 import { jsx as _jsx } from "react/jsx-runtime";
 
 const queryClient = new QueryClient({
@@ -34,6 +34,8 @@ if ('serviceWorker' in navigator) {
 window.addEventListener('online', () => {
   void flushOutbox();
 });
+
+startOutboxPeriodicFlush();
 
 createRoot(document.getElementById('root')).render(/*#__PURE__*/
   _jsx(StrictMode, { children: /*#__PURE__*/
